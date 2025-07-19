@@ -1,0 +1,75 @@
+{% extends "ksiegowosc/base.html" %} {% block title %}Faktura {{
+invoice.invoice_number }}{% endblock %} {% block page_content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Faktura {{ invoice.invoice_number }}</h1>
+    {% if invoice.original_pdf %}
+                <a href="{{ invoice.original_pdf.url }}" class="btn btn-info" target="_blank">Pokaż oryginał (PDF)</a>
+     {% endif %}
+            <a href="{% url 'invoice_pdf' invoice.id %}" class="btn btn-primary">Pobierz PDF</a>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <h4>Nabywca</h4>
+        <p>
+            <strong>{{ invoice.contractor.name }}</strong><br />
+            {{ invoice.contractor.street }}<br />
+            {{ invoice.contractor.zip_code }} {{ invoice.contractor.city }}<br />
+            NIP: {{ invoice.contractor.tax_id }}
+        </p>
+
+        <p>
+            <strong>Data wystawienia:</strong> {{ invoice.issue_date|date:"Y-m-d" }}<br>
+            <strong>Data sprzedaży:</strong> {{ invoice.sale_date|date:"Y-m-d" }}<br>
+            <strong>Termin płatności:</strong> {{ invoice.payment_date|date:"Y-m-d" }}
+        </p>
+    </div>
+
+    {% if invoice.is_correction and invoice.correction_reason %}
+        <div class="alert alert-warning mt-4">
+            <h5 class="alert-heading">Powód Korekty</h5>
+            <p>{{ invoice.correction_reason }}</p>
+            {% if invoice.corrected_invoice %}
+            <hr>
+            <p class="mb-0">
+                Dotyczy faktury:
+                <a href="{% url 'invoice_detail' invoice.corrected_invoice.id %}">
+                    {{ invoice.corrected_invoice.invoice_number }}
+                </a>
+            </p>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <h4 class="mt-4">Pozycje na fakturze</h4>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Lp.</th>
+                <th>Nazwa</th>
+                <th class="text-center">Ilość</th>
+                <th class="text-end">Cena jedn.</th>
+                <th class="text-end">Wartość</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in invoice.items.all %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ item.name }}</td>
+                <td class="text-center">{{ item.quantity }} {{ item.unit }}</td>
+                <td class="text-end">{{ item.unit_price }} PLN</td>
+                <td class="text-end">{{ item.total_price }} PLN</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="fw-bold">
+                <td colspan="4" class="text-end">Suma:</td>
+                <td class="text-end">{{ invoice.total_amount }} PLN</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% endblock %}
+</div>

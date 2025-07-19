@@ -1,0 +1,76 @@
+{% extends "ksiegowosc/base.html" %}
+
+{% block title %}Nowa Faktura{% endblock %}
+
+{% block page_content %}
+
+<h1 class="mb-4">Nowa Faktura</h1>
+<form method="post" id="invoice-form">
+    {% csrf_token %}
+
+    <h4>Dane Główne</h4>
+    <div class="row">
+        <div class="col-md-6 mb-3">{{ form.contractor.label_tag }} {{ form.contractor }}</div>
+        <div class="col-md-6 mb-3">{{ form.payment_method.label_tag }} {{ form.payment_method }}</div>
+        <div class="col-md-4 mb-3">{{ form.issue_date.label_tag }} {{ form.issue_date }}</div>
+        <div class="col-md-4 mb-3">{{ form.sale_date.label_tag }} {{ form.sale_date }}</div>
+        <div class="col-md-4 mb-3">{{ form.payment_date.label_tag }} {{ form.payment_date }}</div>
+        <div class="col-12 mb-3">{{ form.notes.label_tag }}<br>{{ form.notes }}</div>
+    </div>
+    <hr>
+
+    <h4>Pozycje na fakturze</h4>
+    {{ formset.management_form }}
+    <div id="item-forms-container">
+        {% for item_form in formset %}
+        <div class="item-form row mb-2 align-items-center">
+            <div class="col-md-4">{{ item_form.name }}</div>
+            <div class="col-md-2">{{ item_form.quantity }}</div>
+            <div class="col-md-2">{{ item_form.unit }}</div>
+            <div class="col-md-2">{{ item_form.unit_price }}</div>
+            <div class="col-md-2">
+                {% if item_form.instance.pk %}{{ item_form.DELETE }}{% endif %}
+            </div>
+            {{ item_form.id }}
+        </div>
+        {% endfor %}
+    </div>
+
+    <button type="button" id="add-item-btn" class="btn btn-secondary mt-2">Dodaj pozycję</button>
+    <hr>
+    <button type="submit" class="btn btn-primary">Zapisz fakturę</button>
+</form>
+
+<div id="empty-item-form" class="d-none">
+    <div class="item-form row mb-2 align-items-center">
+        <div class="col-md-4">{{ formset.empty_form.name }}</div>
+        <div class="col-md-2">{{ formset.empty_form.quantity }}</div>
+        <div class="col-md-2">{{ formset.empty_form.unit }}</div>
+        <div class="col-md-2">{{ formset.empty_form.unit_price }}</div>
+        <div class="col-md-2"></div>
+        {{ formset.empty_form.id }}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const addItemBtn = document.getElementById('add-item-btn');
+    const container = document.getElementById('item-forms-container');
+    const emptyFormTemplate = document.getElementById('empty-item-form').innerHTML;
+    const formsetPrefix = '{{ formset.prefix }}';
+
+    addItemBtn.addEventListener('click', function() {
+        const totalFormsInput = document.getElementById(`id_${formsetPrefix}-TOTAL_FORMS`);
+        const currentFormCount = parseInt(totalFormsInput.value);
+
+        const newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
+
+        const newFormElement = document.createElement('div');
+        newFormElement.innerHTML = newFormHtml;
+        container.append(newFormElement.firstElementChild);
+
+        totalFormsInput.value = currentFormCount + 1;
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "ksiegowosc/base.html" %}
+{% block title %}Importuj Fakturę z PDF{% endblock %}
+{% block page_content %}
+
+    <h1 class="mb-4">Importuj Fakturę z PDF</h1>
+    <p>Wybierz plik faktury w formacie PDF, aby spróbować automatycznie wypełnić formularz.</p>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="mb-3">
+            <input class="form-control" type="file" name="pdf_file" accept="application/pdf" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Przetwórz PDF</button>
+    </form>
+{% endblock %}

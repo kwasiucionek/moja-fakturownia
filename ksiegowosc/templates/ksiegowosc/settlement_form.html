@@ -1,0 +1,53 @@
+{% extends "ksiegowosc/base.html" %}
+
+{% block title %}Rozliczenie Miesięczne{% endblock %}
+
+{% block page_content %}
+
+<h1 class="mb-4">Rozliczenie Miesięczne</h1>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Wybierz okres do rozliczenia</h5>
+        <form method="post">
+            {% csrf_token %}
+            <div class="row align-items-end">
+                <div class="col-md-3">
+                    <label for="year" class="form-label">Rok</label>
+                    <select name="year" id="year" class="form-select">
+                        {% for y in years %}
+                        <option value="{{ y }}" {% if y == request.POST.year|add:0 %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="month" class="form-label">Miesiąc</label>
+                    <select name="month" id="month" class="form-select">
+                        {% for m in months %}
+                        <option value="{{ m }}" {% if m == request.POST.month|add:0 %}selected{% endif %}>{{ m }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="health_insurance_paid" class="form-label">Opłacona składka zdrowotna</label>
+                    <input type="text" name="health_insurance_paid" id="health_insurance_paid" class="form-control" value="{{ request.POST.health_insurance_paid }}">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Oblicz</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if submitted %}
+<div class="alert alert-success">
+    <h4 class="alert-heading">Wyniki rozliczenia za {{ settlement.month }}/{{ settlement.year }}</h4>
+    <p><strong>Całkowity przychód:</strong> {{ settlement.total_revenue|floatformat:2 }} PLN</p>
+    <p><strong>Należny podatek dochodowy (ryczałt 14%):</strong> {{ settlement.income_tax_payable|floatformat:2 }} PLN</p>
+    <hr>
+    <p class="mb-0">Rozliczenie zostało zapisane w systemie.</p>
+</div>
+{% endif %}
+
+{% endblock %}
