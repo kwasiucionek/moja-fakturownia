@@ -3,55 +3,144 @@
     <head>
         <meta charset="utf-8">
         <style>
-            @page { size: A4; margin: 1.5cm; }
-            body { font-family: Arial, sans-serif; font-size: 10pt; line-height: 1.2; }
-            h1 { font-size: 18pt; text-align: center; margin-bottom: 1cm; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 0.5cm; }
-            th, td { border: 1px solid #000; padding: 6px; text-align: left; vertical-align: top; }
-            th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
-            .header-table td { border: none; padding: 0; padding-bottom: 0.5cm; }
-            .text-end { text-align: right; }
-            .text-center { text-align: center; }
-            .total-summary { font-weight: bold; font-size: 12pt; }
-            .seller, .buyer { width: 50%; vertical-align: top; }
+            @page { 
+                size: A4; 
+                margin: 1.5cm; 
+            }
+            body { 
+                font-family: Arial, sans-serif; 
+                font-size: 11pt; 
+                line-height: 1.3; 
+                color: #000;
+            }
+            h1 { 
+                font-size: 20pt; 
+                text-align: center; 
+                margin: 1cm 0; 
+                font-weight: bold; 
+                text-transform: uppercase;
+            }
+            table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-bottom: 0.8cm; 
+            }
+            th, td { 
+                border: 1px solid #000; 
+                padding: 8px; 
+                text-align: left; 
+                vertical-align: top; 
+                font-size: 10pt;
+            }
+            th { 
+                background-color: #f5f5f5; 
+                font-weight: bold; 
+                text-align: center;
+                font-size: 9pt;
+                text-transform: uppercase;
+            }
+            .header-table td { 
+                border: none; 
+                padding: 0; 
+                padding-bottom: 0.8cm; 
+                vertical-align: top;
+                font-size: 10pt;
+            }
+            .text-end { 
+                text-align: right; 
+            }
+            .text-center { 
+                text-align: center; 
+            }
+            .total-summary { 
+                font-weight: bold; 
+                font-size: 14pt; 
+            }
+            .seller, .buyer { 
+                width: 50%; 
+                vertical-align: top; 
+                padding: 15px;
+                border: 1px solid #000;
+            }
             .correction-info { 
                 border: 2px solid #000; 
-                padding: 10px; 
-                margin: 15px 0; 
+                padding: 12px; 
+                margin: 20px 0; 
                 background-color: #f9f9f9;
                 font-weight: bold;
-            }
-            .correction-reason { 
-                margin: 10px 0; 
-                padding: 8px; 
-                border: 1px solid #666; 
-                background-color: #fff;
-            }
-            .invoice-details { 
-                margin: 10px 0; 
-                font-size: 9pt; 
-            }
-            .amount-section {
-                margin-top: 15px;
-                text-align: right;
                 font-size: 11pt;
             }
+            .correction-reason { 
+                margin: 12px 0; 
+                padding: 10px; 
+                border: 1px solid #666; 
+                background-color: #fff;
+                font-size: 10pt;
+            }
+            .invoice-details { 
+                margin: 12px 0; 
+                font-size: 10pt; 
+                text-align: right;
+            }
+            .amount-section {
+                margin-top: 20px;
+                text-align: right;
+                font-size: 11pt;
+                line-height: 1.4;
+            }
             .signatures {
-                margin-top: 30px;
+                margin-top: 40px;
                 border-collapse: collapse;
             }
             .signatures td {
                 border: 1px solid #000;
-                padding: 15px;
+                padding: 20px;
                 text-align: center;
                 width: 50%;
+                height: 60px;
+                vertical-align: bottom;
+            }
+            .positions-table th {
+                background-color: #e8e8e8;
+                font-weight: bold;
+                padding: 10px 6px;
+                border: 1px solid #000;
+            }
+            .positions-table td {
+                padding: 8px 6px;
+                border: 1px solid #000;
+                font-size: 10pt;
+            }
+            .positions-table tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            .item-description {
+                font-size: 9pt;
+                line-height: 1.2;
+            }
+            .company-header {
+                font-size: 12pt;
+                font-weight: bold;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+            }
+            .invoice-number {
+                font-size: 12pt;
+                font-weight: bold;
+                text-align: right;
+                margin-bottom: 0.5cm;
+            }
+            .total-row {
+                background-color: #f0f0f0 !important;
+                font-weight: bold;
+                font-size: 11pt;
             }
         </style>
     </head>
     <body>
 
-        <div style="text-align: right; font-size: 11pt; margin-bottom: 0.5cm;">
-            <strong>DATA WYSTAWIENIA:</strong> {{ invoice.issue_date|date:"d/m/Y" }}<br>
+        <div class="invoice-number">
+            <strong>DATA WYSTAWIENIA:</strong> {{ invoice.issue_date|date:"d.m.Y" }}<br>
             <strong>NR {% if invoice.is_correction %}FK{% else %}F{% endif %}</strong> {{ invoice.invoice_number }}
         </div>
 
@@ -59,40 +148,44 @@
             {% if invoice.is_correction %}
                 FAKTURA KORYGUJĄCA
             {% else %}
-                FAKTURA
+                FAKTURA VAT
             {% endif %}
         </h1>
 
         <table class="header-table">
             <tr>
                 <td class="seller">
-                    <strong>SPRZEDAWCA</strong><br>
+                    <div class="company-header">Sprzedawca</div>
                     {% if company_info %}
-                        {{ company_info.company_name }}<br>
+                        <strong>{{ company_info.company_name }}</strong><br>
                         {{ company_info.street }}<br>
-                        {{ company_info.zip_code }} {{ company_info.city }}<br>
+                        {{ company_info.zip_code }} {{ company_info.city }}<br><br>
                         <strong>NIP:</strong> {{ company_info.tax_id }}
                     {% else %}
-                        Brak danych firmy.
+                        <strong>Brak danych firmy</strong><br>
+                        Uzupełnij dane w panelu administracyjnym
                     {% endif %}
                 </td>
                 <td class="buyer">
-                    <strong>NABYWCA</strong><br>
-                    {{ invoice.contractor.name }}<br>
-                    {{ invoice.contractor.street }}<br>
-                    {{ invoice.contractor.zip_code }} {{ invoice.contractor.city }}<br>
-                    <strong>NIP:</strong> {{ invoice.contractor.tax_id }}
+                    <div class="company-header">Nabywca</div>
+                    <strong>{{ invoice.contractor.name }}</strong><br>
+                    {% if invoice.contractor.street %}{{ invoice.contractor.street }}<br>{% endif %}
+                    {% if invoice.contractor.zip_code and invoice.contractor.city %}
+                        {{ invoice.contractor.zip_code }} {{ invoice.contractor.city }}<br>
+                    {% endif %}
+                    <br>
+                    <strong>NIP:</strong> {{ invoice.contractor.tax_id|default:"Brak" }}
                 </td>
             </tr>
         </table>
 
         {% if invoice.is_correction %}
             <div class="correction-info">
-                <strong>DOTYCZY:</strong> 
+                <strong>FAKTURA KORYGUJĄCA DOTYCZY:</strong> 
                 {% if invoice.corrected_invoice %}
-                    FAKTURA NR {{ invoice.corrected_invoice.invoice_number }}, 
-                    DATA WYSTAWIENIA: {{ invoice.corrected_invoice.issue_date|date:"d/m/Y" }}, 
-                    DATA SPRZEDAŻY: {{ invoice.corrected_invoice.sale_date|date:"d/m/Y" }}
+                    FAKTURA NR {{ invoice.corrected_invoice.invoice_number }}<br>
+                    DATA WYSTAWIENIA: {{ invoice.corrected_invoice.issue_date|date:"d.m.Y" }}<br>
+                    DATA SPRZEDAŻY: {{ invoice.corrected_invoice.sale_date|date:"d.m.Y" }}
                 {% else %}
                     FAKTURA KORYGUJĄCA
                 {% endif %}
@@ -100,93 +193,88 @@
             
             {% if invoice.correction_reason %}
                 <div class="correction-reason">
-                    <strong>POWÓD KOREKTY</strong><br>
+                    <strong>POWÓD KOREKTY:</strong><br>
                     {{ invoice.correction_reason }}
                 </div>
             {% endif %}
-
-            <div style="margin: 10px 0; font-size: 9pt;">
-                <strong>PODSTAWA ZWOLNIENIA Z VAT</strong><br>
-                art. 43 ust. 1 pkt 19 ustawy o podatku od towarów i usług
-            </div>
         {% endif %}
 
         <div class="invoice-details">
-            <strong>Data sprzedaży:</strong> {{ invoice.sale_date|date:"d/m/Y" }}
+            <strong>Data sprzedaży:</strong> {{ invoice.sale_date|date:"d.m.Y" }}
         </div>
 
-        <table>
+        <table class="positions-table">
             <thead>
                 <tr>
-                    <th style="width: 5%;">LP</th>
-                    <th style="width: 45%;">NAZWA ARTYKUŁU / USŁUGI</th>
-                    <th style="width: 15%;">CENA JEDN.</th>
-                    <th style="width: 10%;">ILOŚĆ</th>
-                    <th style="width: 10%;">JEDN.</th>
-                    <th style="width: 15%;">KWOTA</th>
+                    <th style="width: 6%;">Lp.</th>
+                    <th style="width: 40%;">Nazwa artykułu/usługi</th>
+                    <th style="width: 12%;">J.M.</th>
+                    <th style="width: 12%;">Ilość</th>
+                    <th style="width: 15%;">Cena jedn. netto</th>
+                    <th style="width: 15%;">Wartość netto</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in invoice.items.all %}
                 <tr>
                     <td class="text-center">{{ forloop.counter }}</td>
-                    <td>
+                    <td class="item-description">
                         {% if invoice.is_correction %}
-                            <strong>PO KOREKCIE</strong><br>
+                            <strong>PO KOREKCIE:</strong><br>
                         {% endif %}
                         {{ item.name }}
                     </td>
-                    <td class="text-end">{{ item.unit_price|floatformat:2 }}</td>
-                    <td class="text-center">{{ item.quantity|floatformat:0 }}</td>
                     <td class="text-center">{{ item.unit }}</td>
+                    <td class="text-center">{{ item.quantity|floatformat:2 }}</td>
+                    <td class="text-end">{{ item.unit_price|floatformat:2 }}</td>
                     <td class="text-end">{{ item.total_price|floatformat:2 }}</td>
                 </tr>
                 {% endfor %}
+                <tr class="total-row">
+                    <td colspan="5" class="text-end"><strong>RAZEM:</strong></td>
+                    <td class="text-end"><strong>{{ invoice.total_amount|floatformat:2 }} PLN</strong></td>
+                </tr>
             </tbody>
         </table>
 
+        <div style="margin: 15px 0; font-size: 10pt;">
+            <strong>PODSTAWA ZWOLNIENIA Z VAT:</strong> art. 113 ust. 1 i 9 ustawy o podatku od towarów i usług
+        </div>
+
         <div class="amount-section">
-            <strong>TERMIN PŁATNOŚCI:</strong> {{ invoice.payment_date|date:"d/m/Y" }}<br>
+            <strong>TERMIN PŁATNOŚCI:</strong> {{ invoice.payment_date|date:"d.m.Y" }}<br>
             <strong>SPOSÓB ZAPŁATY:</strong> {{ invoice.get_payment_method_display|upper }}<br>
-            {% if company_info %}
+            {% if company_info and company_info.bank_account_number %}
                 <strong>RACHUNEK BANKOWY:</strong> {{ company_info.bank_account_number }}<br>
             {% endif %}
         </div>
 
-        <div class="total-summary text-end" style="margin-top: 15px;">
-            <strong>
-                {% if invoice.is_correction %}
-                    DO ZAPŁATY: {{ invoice.total_amount|floatformat:2 }}
-                {% else %}
-                    DO ZAPŁATY: {{ invoice.total_amount|floatformat:2 }} zł
-                {% endif %}
-            </strong>
+        <div class="total-summary text-end" style="margin-top: 25px; border: 2px solid #000; padding: 15px; background-color: #f5f5f5;">
+            <strong>DO ZAPŁATY: {{ invoice.total_amount|floatformat:2 }} PLN</strong>
         </div>
 
-        <table class="signatures" style="margin-top: 40px;">
+        <table class="signatures">
             <tr>
                 <td>
-                    <div style="margin-bottom: 30px;"></div>
-                    <strong>podpis osoby upoważnionej<br>do wystawienia faktury</strong>
+                    <strong>Podpis osoby upoważnionej<br>do wystawienia faktury</strong>
                 </td>
                 <td>
-                    <div style="margin-bottom: 30px;"></div>
-                    <strong>podpis osoby upoważnionej<br>do odbioru faktury</strong>
+                    <strong>Podpis osoby upoważnionej<br>do odbioru faktury</strong>
                 </td>
             </tr>
         </table>
 
         {% if invoice.notes %}
-            <div style="margin-top: 15px; font-size: 9pt;">
+            <div style="margin-top: 20px; font-size: 10pt; border-top: 1px solid #ccc; padding-top: 10px;">
                 <strong>Uwagi:</strong><br>{{ invoice.notes }}
             </div>
         {% endif %}
 
-        <div style="margin-top: 20px; text-align: center; font-size: 8pt; color: #666;">
+        <div style="margin-top: 30px; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #ccc; padding-top: 10px;">
             {% if invoice.is_correction %}
-                FAKTURA KORYGUJĄCA NR {{ invoice.invoice_number }} STRONA 1 / 1
+                FAKTURA KORYGUJĄCA NR {{ invoice.invoice_number }} | STRONA 1 z 1
             {% else %}
-                FAKTURA NR {{ invoice.invoice_number }} STRONA 1 / 1
+                FAKTURA NR {{ invoice.invoice_number }} | STRONA 1 z 1
             {% endif %}
         </div>
 
