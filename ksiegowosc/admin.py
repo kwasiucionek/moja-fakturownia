@@ -310,12 +310,56 @@ class InvoiceAdmin(admin.ModelAdmin):
             if not faktury_nodes:
                 raise ValueError("Nie znaleziono elementów 'Faktura' w pliku JPK")
 
-            return self.process_faktury_nodes(faktury_nodes, ns, user)
+            # Pobierz wszystkie wiersze faktur z całego dokumentu
+            all_invoice_items = self.collect_all_invoice_items(root, ns)
+
+            return self.process_faktury_nodes(faktury_nodes, ns, user, all_invoice_items)
 
         except ET.ParseError as e:
             raise ValueError(f"Błąd parsowania XML: {str(e)}")
 
-    def process_faktury_nodes(self, faktury_nodes, ns, user):
+    def collect_all_invoice_items(self, root, ns):
+        """Zbiera wszystkie pozycje faktur z dokumentu"""
+        all_items = {}
+        
+        def get_text(node, paths):
+            if not isinstance(paths, list):
+                paths = [paths]
+                
+            for path in paths:
+                if 'tns' in ns and ns['tns']:
+                    found_node = node.find(f'tns:{path}', ns)
+                else:
+                    found_node = node.find(path)
+                    
+                if found_node is not None and found_node.text:
+                    return found_node.text.strip()
+            return None
+
+        # Szukaj FakturaWiersz na głównym poziomie
+        if 'tns' in ns and ns['tns']:
+            item_nodes = root.findall('tns:FakturaWiersz', ns)
+        else:
+            item_nodes = root.findall('.//FakturaWiersz')
+
+        for item_node in item_nodes:
+            invoice_number = get_text(item_node, ['P_2B', '2B'])
+            if invoice_number:
+                if invoice_number not in all_items:
+                    all_items[invoice_number] = []
+                
+                item_data = {
+                    'name': get_text(item_node, ['P_7', '7']) or 'Usługa',
+                    'unit': get_text(item_node, ['P_8A', '8A']) or 'szt.',
+                    'quantity': get_text(item_node, ['P_8B', '8B']) or '1.00',
+                    'unit_price': get_text(item_node, ['P_9B', '9B']) or '0.00',
+                    'total_price': get_text(item_node, ['P_11A', '11A']) or '0.00'
+                }
+                all_items[invoice_number].append(item_data)
+
+        return all_items
+
+    def process_faktury_nodes(self, faktury_nodes, ns, user, all_invoice_items):
         """Przetwarza węzły faktur z XML wraz z pozycjami"""
         def get_text(node, paths):
             if not isinstance(paths, list):
@@ -389,19 +433,13 @@ class InvoiceAdmin(admin.ModelAdmin):
                 
                 # Jeśli to korekta, szukaj dodatkowych informacji
                 if is_correction:
-                    # Powód korekty - różne możliwe pola
+                    # POPRAWIONE: Dodaj wszystkie możliwe nazwy pól dla powodu korekty
                     correction_reason = get_text(faktura_node, [
+                        'PrzyczynaKorekty', 'tns:PrzyczynaKorekty',
                         'P_16', 'tns:P_16', 'PowodKorekty', 'tns:PowodKorekty',
                         'P_15A', 'tns:P_15A', 'OpisKorekty', 'tns:OpisKorekty',
                         'UwagiKorekta', 'tns:UwagiKorekta', 'Uwagi', 'tns:Uwagi'
                     ])
-                    
-                    # Jeśli nie ma powodu w standardowych polach, sprawdź w opisie
-                    if not correction_reason:
-                        # Spróbuj znaleźć powód w opisie usługi lub uwagach
-                        service_note = get_text(faktura_node, ['P_7', 'tns:P_7'])
-                        if service_note and ('korekta' in service_note.lower() or 'błąd' in service_note.lower()):
-                            correction_reason = service_note
                     
                     # Domyślny powód jeśli nic nie znaleziono
                     if not correction_reason:
@@ -411,6 +449,7 @@ class InvoiceAdmin(admin.ModelAdmin):
                     
                     # Numer faktury korygowanej
                     corrected_invoice_number = get_text(faktura_node, [
+                        'NrFaKorygowanej', 'tns:NrFaKorygowanej',
                         'P_2B', 'tns:P_2B', 'NrFakturyKorygowanej', 'tns:NrFakturyKorygowanej',
                         'P_2A_Kor', 'tns:P_2A_Kor', 'FakturaKorygowana', 'tns:FakturaKorygowana'
                     ])
@@ -449,10 +488,12 @@ class InvoiceAdmin(admin.ModelAdmin):
                     payment_method='przelew'
                 )
 
-                # Sprawdź czy są pozycje faktury w JPK
-                items_created = self.process_invoice_items(faktura_node, ns, invoice, user)
+                # POPRAWIONE: Użyj zebranych pozycji z FakturaWiersz
+                items_created = self.create_invoice_items_from_collected_data(
+                    invoice, user, all_invoice_items.get(invoice_number, [])
+                )
                 
-                # Jeśli nie ma pozycji w JPK, utwórz domyślną pozycję
+                # Jeśli nie ma pozycji, utwórz domyślną pozycję
                 if items_created == 0 and total_amount > 0:
                     InvoiceItem.objects.create(
                         user=user,
@@ -473,116 +514,52 @@ class InvoiceAdmin(admin.ModelAdmin):
 
         return created_invoices, skipped_invoices
 
-    def process_invoice_items(self, faktura_node, ns, invoice, user):
-        """Przetwarza pozycje faktury z JPK"""
+    def create_invoice_items_from_collected_data(self, invoice, user, items_data):
+        """Tworzy pozycje faktury z zebranych danych"""
         items_created = 0
         
-        def get_text(node, paths):
-            if not isinstance(paths, list):
-                paths = [paths]
-                
-            for path in paths:
-                if 'tns' in ns and ns['tns']:
-                    found_node = node.find(f'tns:{path}', ns)
-                else:
-                    found_node = node.find(path)
-                    
-                if found_node is not None and found_node.text:
-                    return found_node.text.strip()
-            return None
-
         def parse_decimal(value_str):
             if not value_str:
-                return Decimal('1.00')
+                return Decimal('0.00')
             try:
                 cleaned_value = value_str.replace(',', '.').replace(' ', '')
                 return Decimal(cleaned_value)
             except (InvalidOperation, ValueError):
-                return Decimal('1.00')
+                return Decimal('0.00')
 
-        # 1. Sprawdź pozycję w głównym węźle faktury
-        service_desc = get_text(faktura_node, [
-            'P_7', 'tns:P_7', 'OpisUslugi', 'tns:OpisUslugi',
-            'P_12', 'tns:P_12', 'NazwaTowaru', 'tns:NazwaTowaru'
-        ])
-        
-        if service_desc:
-            quantity_str = get_text(faktura_node, ['P_8A', 'tns:P_8A'])
-            unit_str = get_text(faktura_node, ['P_8B', 'tns:P_8B'])
-            unit_price_str = get_text(faktura_node, ['P_9A', 'tns:P_9A'])
-            value_str = get_text(faktura_node, ['P_11', 'tns:P_11'])
-            
-            quantity = parse_decimal(quantity_str) if quantity_str else Decimal('1.00')
-            unit = unit_str if unit_str else 'szt.'
-            unit_price = parse_decimal(unit_price_str) if unit_price_str else Decimal('0.00')
-            total_price = parse_decimal(value_str) if value_str else Decimal('0.00')
-            
-            if total_price == 0:
-                total_price = invoice.total_amount
-            if unit_price == 0 and total_price > 0 and quantity > 0:
-                unit_price = total_price / quantity
-            
-            InvoiceItem.objects.create(
-                user=user,
-                invoice=invoice,
-                name=service_desc,
-                quantity=quantity,
-                unit=unit,
-                unit_price=unit_price,
-                total_price=total_price
-            )
-            items_created = 1
-
-        # 2. Sprawdź dedykowane węzły pozycji
-        possible_item_paths = [
-            './/FakturaWiersz', './/tns:FakturaWiersz',
-            './/Wiersz', './/tns:Wiersz',
-            './/PozycjaFaktury', './/tns:PozycjaFaktury'
-        ]
-        
-        item_nodes = []
-        for path in possible_item_paths:
-            if path.startswith('.//tns:'):
-                found_items = faktura_node.findall(path, ns)
-            else:
-                found_items = faktura_node.findall(path)
-            if found_items:
-                item_nodes = found_items
-                break
-        
-        for i, item_node in enumerate(item_nodes):
+        for item_data in items_data:
             try:
-                item_name = get_text(item_node, [
-                    'P_7', 'tns:P_7', 'NazwaTowaru', 'tns:NazwaTowaru', 
-                    'Nazwa', 'tns:Nazwa'
-                ]) or f"Pozycja {i+1}"
+                quantity = parse_decimal(item_data['quantity'])
+                unit_price = parse_decimal(item_data['unit_price'])
+                total_price = parse_decimal(item_data['total_price'])
                 
-                quantity_str = get_text(item_node, ['P_8A', 'tns:P_8A'])
-                unit_str = get_text(item_node, ['P_8B', 'tns:P_8B'])
-                unit_price_str = get_text(item_node, ['P_9A', 'tns:P_9A'])
-                value_str = get_text(item_node, ['P_11', 'tns:P_11'])
+                # Jeśli brak total_price, oblicz z quantity * unit_price
+                if total_price == 0 and quantity > 0 and unit_price > 0:
+                    total_price = quantity * unit_price
                 
-                quantity = parse_decimal(quantity_str) if quantity_str else Decimal('1.00')
-                unit = unit_str if unit_str else 'szt.'
-                unit_price = parse_decimal(unit_price_str) if unit_price_str else Decimal('0.00')
-                total_price = parse_decimal(value_str) if value_str else (quantity * unit_price)
-                
+                # Jeśli brak unit_price ale jest total_price i quantity
                 if unit_price == 0 and total_price > 0 and quantity > 0:
                     unit_price = total_price / quantity
+                
+                # Jeśli nadal brak danych, zastąp wartości domyślne
+                if quantity == 0:
+                    quantity = Decimal('1.00')
+                if total_price == 0:
+                    total_price = unit_price
                 
                 InvoiceItem.objects.create(
                     user=user,
                     invoice=invoice,
-                    name=item_name,
+                    name=item_data['name'] or 'Usługa',
                     quantity=quantity,
-                    unit=unit,
+                    unit=item_data['unit'] or 'szt.',
                     unit_price=unit_price,
                     total_price=total_price
                 )
                 items_created += 1
                 
             except Exception as e:
-                print(f"Błąd przetwarzania pozycji {i+1}: {str(e)}")
+                print(f"Błąd tworzenia pozycji faktury: {str(e)}")
                 continue
         
         return items_created
