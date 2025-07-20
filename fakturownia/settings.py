@@ -12,9 +12,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -27,9 +27,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
 # Application definition
-
 INSTALLED_APPS = [
     'jazzmin',
     'django.contrib.admin',
@@ -39,7 +37,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "debug_toolbar",
-    'import_export',
     'ksiegowosc',
 ]
 
@@ -73,10 +70,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'fakturownia.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -84,10 +79,8 @@ DATABASES = {
     }
 }
 
-
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -103,35 +96,25 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
-
-LANGUAGE_CODE = 'en-us'
-
-TIME_ZONE = 'UTC'
-
+LANGUAGE_CODE = 'pl'
+TIME_ZONE = 'Europe/Warsaw'
 USE_I18N = True
-
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = 'static/'
-
-
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
+# Jazzmin settings
 JAZZMIN_SETTINGS = {
     # Tytuły
     "site_title": "Fakturownia",
@@ -143,7 +126,7 @@ JAZZMIN_SETTINGS = {
     # Górne menu
     "topmenu_links": [
         {"name": "Home", "url": "admin:index"},
-        {"app": "ksiegowosc"}, # Link do Twojej aplikacji
+        {"app": "ksiegowosc"},
     ],
 
     # Menu użytkownika
@@ -158,16 +141,6 @@ JAZZMIN_SETTINGS = {
     "show_sidebar": True,
     "navigation_expanded": True,
 
-    # Twoje własne linki w menu
-    "custom_links": {
-        "ksiegowosc": [
-            #{"name": "Pulpit", "url": "/admin", "icon": "fas fa-tachometer-alt"},
-            #{"model": "ksiegowosc.Invoice", "icon": "fas fa-file-invoice", "name": "Faktury"},
-            {"name": "Import JPK", "url": "/admin/ksiegowosc/invoice/import-jpk/", "icon": "fas fa-upload"},
-           #{"model": "ksiegowosc.Contractor", "icon": "fas fa-address-book", "name": "Kontrahenci"},
-        ]
-    },
-
     # Ikony
     "icons": {
         "auth": "fas fa-users-cog",
@@ -180,20 +153,17 @@ JAZZMIN_SETTINGS = {
         "ksiegowosc.monthlysettlement": "fas fa-calculator",
     },
 
-    # Ulepszenia interfejsu -    # - single     # - horizontal_tabs (default)     # - vertical_tabs     # - collapsible     # - carousel
+    # Ulepszenia interfejsu
     "show_ui_builder": True,
     "changeform_format": "horizontal_tabs",
     "related_modal_active": True,
 
-     # Relative paths to custom CSS/JS scripts (must be present in static files)
+    # CSS/JS
     "custom_css": None,
     "custom_js": None,
-        # Whether to link font from fonts.googleapis.com (use custom_css to supply font otherwise)
     "use_google_fonts_cdn": True,
-        # Whether to show the UI customizer on the sidebar
     "show_ui_builder": True,
     "language_chooser": False,
-
 }
 
 INTERNAL_IPS = [

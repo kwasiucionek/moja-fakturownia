@@ -1,0 +1,103 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block title %}Import faktur z JPK_FA{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static "admin/css/changelists.css" %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:ksiegowosc_invoice_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; Import z JPK_FA
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="module filtered">
+        <h1>Import faktur z JPK_FA</h1>
+        
+        <div class="description">
+            <p>Wybierz plik JPK_FA w formacie XML (.xml) aby zaimportować faktury z pozycjami do systemu.</p>
+            <ul>
+                <li>System automatycznie utworzy kontrahentów na podstawie danych z pliku</li>
+                <li>Faktury będą przypisane do Twojego konta użytkownika</li>
+                <li>Duplikaty (te same numery faktur) zostaną pominięte</li>
+                <li>System rozpozna faktury korygujące</li>
+                <li>Import obejmuje pozycje/usługi z faktur (P_7, P_8A, P_8B, P_9A, P_11)</li>
+                <li>Jeśli brak szczegółowych pozycji, utworzy domyślną pozycję z całą kwotą</li>
+            </ul>
+        </div>
+        
+        <form method="post" enctype="multipart/form-data" class="import-form">
+            {% csrf_token %}
+            
+            <fieldset class="module aligned">
+                <div class="form-row">
+                    <div>
+                        <label class="required" for="id_xml_file">Plik JPK_FA (.xml):</label>
+                        <input type="file" 
+                               name="xml_file" 
+                               id="id_xml_file" 
+                               accept=".xml" 
+                               required 
+                               class="vFileField">
+                        <p class="help">
+                            Wybierz plik JPK_FA wygenerowany przez Twój system księgowy.
+                        </p>
+                    </div>
+                </div>
+            </fieldset>
+            
+            <div class="submit-row">
+                <input type="submit" value="Importuj faktury" class="default" name="_import">
+                <a href="{% url 'admin:ksiegowosc_invoice_changelist' %}" class="button cancel-link">Anuluj</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.import-form {
+    max-width: 600px;
+}
+
+.description {
+    background: #e8f5e8;
+    border: 1px solid #d4edda;
+    border-radius: 0.25rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.description ul {
+    margin-bottom: 0;
+    padding-left: 1.5rem;
+}
+
+.description li {
+    margin-bottom: 0.5rem;
+}
+
+.help {
+    color: #666;
+    font-size: 0.9em;
+    margin-top: 0.25rem;
+}
+
+.cancel-link {
+    margin-left: 0.5rem;
+    color: #666;
+    text-decoration: none;
+}
+
+.cancel-link:hover {
+    text-decoration: underline;
+}
+</style>
+{% endblock %}
