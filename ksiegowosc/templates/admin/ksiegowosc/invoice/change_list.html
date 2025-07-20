@@ -2,8 +2,15 @@
 
 {% block object-tools-items %}
     <li>
-        <a href="import/" class="addlink">
+        <a href="{% url 'admin:ksiegowosc_invoice_import_jpk' %}" class="btn btn-primary">
+            <i class="fas fa-file-import"></i>
             Importuj z JPK
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'admin:ksiegowosc_invoice_export_jpk' %}" class="btn btn-success">
+            <i class="fas fa-file-export"></i>
+            Eksportuj do CSV
         </a>
     </li>
     {{ block.super }}

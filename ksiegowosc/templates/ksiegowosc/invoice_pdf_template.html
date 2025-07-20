@@ -4,109 +4,191 @@
         <meta charset="utf-8">
         <style>
             @page { size: A4; margin: 1.5cm; }
-            body { font-family: sans-serif; font-size: 10pt; }
-            h1 { font-size: 18pt; text-align: center; margin-bottom: 2cm; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            .header-table td { border: none; padding: 0; }
+            body { font-family: Arial, sans-serif; font-size: 10pt; line-height: 1.2; }
+            h1 { font-size: 18pt; text-align: center; margin-bottom: 1cm; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 0.5cm; }
+            th, td { border: 1px solid #000; padding: 6px; text-align: left; vertical-align: top; }
+            th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+            .header-table td { border: none; padding: 0; padding-bottom: 0.5cm; }
             .text-end { text-align: right; }
-            .total-summary { font-weight: bold; }
+            .text-center { text-align: center; }
+            .total-summary { font-weight: bold; font-size: 12pt; }
             .seller, .buyer { width: 50%; vertical-align: top; }
-            .correction-box { border: 1px solid #999; padding: 10px; margin: 20px 0; background-color: #f9f9f9;}
+            .correction-info { 
+                border: 2px solid #000; 
+                padding: 10px; 
+                margin: 15px 0; 
+                background-color: #f9f9f9;
+                font-weight: bold;
+            }
+            .correction-reason { 
+                margin: 10px 0; 
+                padding: 8px; 
+                border: 1px solid #666; 
+                background-color: #fff;
+            }
+            .invoice-details { 
+                margin: 10px 0; 
+                font-size: 9pt; 
+            }
+            .amount-section {
+                margin-top: 15px;
+                text-align: right;
+                font-size: 11pt;
+            }
+            .signatures {
+                margin-top: 30px;
+                border-collapse: collapse;
+            }
+            .signatures td {
+                border: 1px solid #000;
+                padding: 15px;
+                text-align: center;
+                width: 50%;
+            }
         </style>
     </head>
     <body>
 
+        <div style="text-align: right; font-size: 11pt; margin-bottom: 0.5cm;">
+            <strong>DATA WYSTAWIENIA:</strong> {{ invoice.issue_date|date:"d/m/Y" }}<br>
+            <strong>NR {% if invoice.is_correction %}FK{% else %}F{% endif %}</strong> {{ invoice.invoice_number }}
+        </div>
+
         <h1>
             {% if invoice.is_correction %}
-                Faktura Korygująca nr {{ invoice.invoice_number }}
+                FAKTURA KORYGUJĄCA
             {% else %}
-                Faktura nr {{ invoice.invoice_number }}
+                FAKTURA
             {% endif %}
         </h1>
 
         <table class="header-table">
             <tr>
                 <td class="seller">
-                    <strong>Sprzedawca:</strong><br>
+                    <strong>SPRZEDAWCA</strong><br>
                     {% if company_info %}
                         {{ company_info.company_name }}<br>
                         {{ company_info.street }}<br>
                         {{ company_info.zip_code }} {{ company_info.city }}<br>
-                        NIP: {{ company_info.tax_id }}
+                        <strong>NIP:</strong> {{ company_info.tax_id }}
                     {% else %}
                         Brak danych firmy.
                     {% endif %}
                 </td>
                 <td class="buyer">
-                    <strong>Nabywca:</strong><br>
+                    <strong>NABYWCA</strong><br>
                     {{ invoice.contractor.name }}<br>
                     {{ invoice.contractor.street }}<br>
                     {{ invoice.contractor.zip_code }} {{ invoice.contractor.city }}<br>
-                    NIP: {{ invoice.contractor.tax_id }}
+                    <strong>NIP:</strong> {{ invoice.contractor.tax_id }}
                 </td>
             </tr>
         </table>
 
-        <p style="text-align: right;">
-            Data wystawienia: {{ invoice.issue_date|date:"Y-m-d" }}<br>
-            Data sprzedaży: {{ invoice.sale_date|date:"Y-m-d" }}
-        </p>
-
         {% if invoice.is_correction %}
-            <div class="correction-box">
-                <strong>KOREKTA DO FAKTURY:</strong><br>
+            <div class="correction-info">
+                <strong>DOTYCZY:</strong> 
                 {% if invoice.corrected_invoice %}
-                    Numer: {{ invoice.corrected_invoice.invoice_number }} z dnia {{ invoice.corrected_invoice.issue_date|date:"Y-m-d" }}
+                    FAKTURA NR {{ invoice.corrected_invoice.invoice_number }}, 
+                    DATA WYSTAWIENIA: {{ invoice.corrected_invoice.issue_date|date:"d/m/Y" }}, 
+                    DATA SPRZEDAŻY: {{ invoice.corrected_invoice.sale_date|date:"d/m/Y" }}
                 {% else %}
-                    Brak powiązania z fakturą korygowaną w systemie.
+                    FAKTURA KORYGUJĄCA
                 {% endif %}
-                <br>
-                <strong>Powód korekty:</strong> {{ invoice.correction_reason|default:"Brak powodu." }}
+            </div>
+            
+            {% if invoice.correction_reason %}
+                <div class="correction-reason">
+                    <strong>POWÓD KOREKTY</strong><br>
+                    {{ invoice.correction_reason }}
+                </div>
+            {% endif %}
+
+            <div style="margin: 10px 0; font-size: 9pt;">
+                <strong>PODSTAWA ZWOLNIENIA Z VAT</strong><br>
+                art. 43 ust. 1 pkt 19 ustawy o podatku od towarów i usług
             </div>
         {% endif %}
+
+        <div class="invoice-details">
+            <strong>Data sprzedaży:</strong> {{ invoice.sale_date|date:"d/m/Y" }}
+        </div>
 
         <table>
             <thead>
                 <tr>
-                    <th>Lp.</th>
-                    <th>Nazwa usługi</th>
-                    <th>Ilość</th>
-                    <th>J.m.</th>
-                    <th class="text-end">Cena jedn. netto</th>
-                    <th class="text-end">Wartość netto</th>
+                    <th style="width: 5%;">LP</th>
+                    <th style="width: 45%;">NAZWA ARTYKUŁU / USŁUGI</th>
+                    <th style="width: 15%;">CENA JEDN.</th>
+                    <th style="width: 10%;">ILOŚĆ</th>
+                    <th style="width: 10%;">JEDN.</th>
+                    <th style="width: 15%;">KWOTA</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in invoice.items.all %}
                 <tr>
-                    <td>{{ forloop.counter }}</td>
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.quantity|floatformat:2 }}</td>
-                    <td>{{ item.unit }}</td>
-                    <td class="text-end">{{ item.unit_price|floatformat:2 }} zł</td>
-                    <td class="text-end">{{ item.total_price|floatformat:2 }} zł</td>
+                    <td class="text-center">{{ forloop.counter }}</td>
+                    <td>
+                        {% if invoice.is_correction %}
+                            <strong>PO KOREKCIE</strong><br>
+                        {% endif %}
+                        {{ item.name }}
+                    </td>
+                    <td class="text-end">{{ item.unit_price|floatformat:2 }}</td>
+                    <td class="text-center">{{ item.quantity|floatformat:0 }}</td>
+                    <td class="text-center">{{ item.unit }}</td>
+                    <td class="text-end">{{ item.total_price|floatformat:2 }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
 
-        <p class="text-end total-summary" style="margin-top: 1cm;">
-            Do zapłaty: {{ invoice.total_amount|floatformat:2 }} zł
-        </p>
-
-        <p>
-            Sposób płatności: {{ invoice.get_payment_method_display }}<br>
-            Termin płatności: {{ invoice.payment_date|date:"Y-m-d" }}<br>
+        <div class="amount-section">
+            <strong>TERMIN PŁATNOŚCI:</strong> {{ invoice.payment_date|date:"d/m/Y" }}<br>
+            <strong>SPOSÓB ZAPŁATY:</strong> {{ invoice.get_payment_method_display|upper }}<br>
             {% if company_info %}
-                Numer konta: {{ company_info.bank_account_number }}
+                <strong>RACHUNEK BANKOWY:</strong> {{ company_info.bank_account_number }}<br>
             {% endif %}
-        </p>
+        </div>
+
+        <div class="total-summary text-end" style="margin-top: 15px;">
+            <strong>
+                {% if invoice.is_correction %}
+                    DO ZAPŁATY: {{ invoice.total_amount|floatformat:2 }}
+                {% else %}
+                    DO ZAPŁATY: {{ invoice.total_amount|floatformat:2 }} zł
+                {% endif %}
+            </strong>
+        </div>
+
+        <table class="signatures" style="margin-top: 40px;">
+            <tr>
+                <td>
+                    <div style="margin-bottom: 30px;"></div>
+                    <strong>podpis osoby upoważnionej<br>do wystawienia faktury</strong>
+                </td>
+                <td>
+                    <div style="margin-bottom: 30px;"></div>
+                    <strong>podpis osoby upoważnionej<br>do odbioru faktury</strong>
+                </td>
+            </tr>
+        </table>
 
         {% if invoice.notes %}
-            <p><strong>Uwagi:</strong><br>{{ invoice.notes }}</p>
+            <div style="margin-top: 15px; font-size: 9pt;">
+                <strong>Uwagi:</strong><br>{{ invoice.notes }}
+            </div>
         {% endif %}
+
+        <div style="margin-top: 20px; text-align: center; font-size: 8pt; color: #666;">
+            {% if invoice.is_correction %}
+                FAKTURA KORYGUJĄCA NR {{ invoice.invoice_number }} STRONA 1 / 1
+            {% else %}
+                FAKTURA NR {{ invoice.invoice_number }} STRONA 1 / 1
+            {% endif %}
+        </div>
 
     </body>
 </html>

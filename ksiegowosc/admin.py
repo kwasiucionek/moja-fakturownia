@@ -2,91 +2,18 @@
 
 from django.contrib import admin
 from django.urls import path
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from weasyprint import HTML
 from .models import CompanyInfo, Contractor, Invoice, InvoiceItem, MonthlySettlement
 from django.contrib import messages
-from django.shortcuts import redirect
-
-# Imports for django-import-export and custom logic
-from import_export import resources
-from import_export.admin import ImportExportModelAdmin
-from import_export.fields import Field
-from import_export.widgets import ForeignKeyWidget
-from .formats import JPKXMLFormat # Our custom format
-
-# Other necessary imports
-from datetime import datetime
-from decimal import Decimal
 from django.db.models import Sum
-
-# --- Custom Widget for looking up Contractors by NIP for the current user ---
-class ContractorWidget(ForeignKeyWidget):
-    def __init__(self, user, **kwargs):
-        self.user = user
-        # We tell the widget to look up Contractor objects using the 'tax_id' field
-        super().__init__(Contractor, 'tax_id', **kwargs)
-
-    def clean(self, value, row=None, *args, **kwargs):
-        # This method finds or creates a contractor based on the NIP from the imported file
-        if not value:
-            return None
-
-        # get_or_create ensures we don't create duplicate contractors for the same user and NIP
-        contractor, _ = Contractor.objects.get_or_create(
-            tax_id=value,
-            user=self.user,
-            defaults={'name': row.get('contractor_name', 'Brak nazwy')}
-        )
-        return contractor
-
-# --- Resource for defining how Invoices are imported/exported ---
-class InvoiceResource(resources.ModelResource):
-    # We define each column to be imported and tell it how to handle it
-    contractor = Field(
-        attribute='contractor',
-        column_name='contractor_tax_id',
-        widget=None # The widget will be set dynamically in __init__
-    )
-    # This is a helper column used by the widget, not saved to the model directly
-    contractor_name = Field(attribute='contractor_name', column_name='contractor_name')
-
-    class Meta:
-        model = Invoice
-        # Fields to use for standard import/export (CSV, XLSX, etc.)
-        fields = ('id', 'invoice_number', 'issue_date', 'sale_date', 'total_amount', 'user', 'contractor', 'contractor_name')
-        export_order = fields
-        # Use invoice_number as the unique key to prevent creating duplicate invoices
-        import_id_fields = ('invoice_number',)
-        skip_unchanged = True
-        report_skipped = True
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Initialize the widget with a placeholder user; it will be updated with the real user later
-        self.fields['contractor'].widget = ContractorWidget(user=None)
-
-    def before_import(self, dataset, using_transactions, user, **kwargs):
-        """
-        This hook runs before the main import. We pass the current user to the instance.
-        """
-        self.user = user
-        self.fields['contractor'].widget.user = self.user
-
-        # If the file is XML, we use our custom JPK parser (from formats.py) to create the dataset
-        if kwargs.get('file_name', '').lower().endswith('.xml'):
-            # The actual conversion happens in the JPKXMLFormat class
-            # This hook is a good place for any additional pre-processing if needed
-            pass
-
-    def before_save_instance(self, instance, using_transactions, dry_run):
-        """Assigns the logged-in user to each imported object before it's saved."""
-        if self.user:
-            instance.user = self.user
-
-# --- ModelAdmin Classes ---
+from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
+import xml.etree.ElementTree as ET
+from django.db import transaction
+import csv
 
 @admin.register(CompanyInfo)
 class CompanyInfoAdmin(admin.ModelAdmin):
@@ -95,26 +22,30 @@ class CompanyInfoAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser: return qs
+        if request.user.is_superuser: 
+            return qs
         return qs.filter(user=request.user)
 
     def save_model(self, request, obj, form, change):
-        if not hasattr(obj, 'user') or not obj.user: obj.user = request.user
+        if not hasattr(obj, 'user') or not obj.user: 
+            obj.user = request.user
         super().save_model(request, obj, form, change)
 
 @admin.register(Contractor)
-class ContractorAdmin(ImportExportModelAdmin):
+class ContractorAdmin(admin.ModelAdmin):
     list_display = ('name', 'tax_id', 'city', 'user')
     search_fields = ('name', 'tax_id')
     exclude = ('user',)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser: return qs
+        if request.user.is_superuser: 
+            return qs
         return qs.filter(user=request.user)
 
     def save_model(self, request, obj, form, change):
-        if not hasattr(obj, 'user') or not obj.user: obj.user = request.user
+        if not hasattr(obj, 'user') or not obj.user: 
+            obj.user = request.user
         super().save_model(request, obj, form, change)
 
 @admin.register(MonthlySettlement)
@@ -126,33 +57,65 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser: return qs
+        if request.user.is_superuser: 
+            return qs
         return qs.filter(user=request.user)
 
     def save_model(self, request, obj, form, change):
-        if not hasattr(obj, 'user') or not obj.user: obj.user = request.user
+        if not hasattr(obj, 'user') or not obj.user: 
+            obj.user = request.user
         super().save_model(request, obj, form, change)
 
     def get_urls(self):
         urls = super().get_urls()
-        my_urls = [path('oblicz/', self.admin_site.admin_view(self.calculate_view), name='ksiegowosc_monthlysettlement_calculate')]
+        my_urls = [
+            path('oblicz/', self.admin_site.admin_view(self.calculate_view), 
+                 name='ksiegowosc_monthlysettlement_calculate')
+        ]
         return my_urls + urls
 
     def calculate_view(self, request):
-        context = {'opts': self.model._meta, 'site_header': 'Fakturownia', 'site_title': 'Panel Admina', 'title': 'Obliczanie Rozliczenia Miesięcznego'}
+        context = {
+            'opts': self.model._meta, 
+            'site_header': 'Fakturownia', 
+            'site_title': 'Panel Admina', 
+            'title': 'Obliczanie Rozliczenia Miesięcznego'
+        }
+        
         if request.method == 'POST':
-            month, year = int(request.POST.get('month')), int(request.POST.get('year'))
+            month = int(request.POST.get('month'))
+            year = int(request.POST.get('year'))
             health_insurance_paid = float(request.POST.get('health_insurance_paid', '0').replace(',', '.'))
-            total_revenue = Invoice.objects.filter(user=request.user, issue_date__year=year, issue_date__month=month).aggregate(total=Sum('total_amount'))['total'] or 0.00
+            
+            total_revenue = Invoice.objects.filter(
+                user=request.user, 
+                issue_date__year=year, 
+                issue_date__month=month
+            ).aggregate(total=Sum('total_amount'))['total'] or 0.00
+            
             tax_base = float(total_revenue) - (health_insurance_paid * 0.5)
-            if tax_base < 0: tax_base = 0
+            if tax_base < 0: 
+                tax_base = 0
             income_tax_payable = round(tax_base * 0.14)
-            settlement, _ = MonthlySettlement.objects.update_or_create(user=request.user, year=year, month=month, defaults={'total_revenue': total_revenue, 'health_insurance_paid': health_insurance_paid, 'income_tax_payable': income_tax_payable})
+            
+            settlement, _ = MonthlySettlement.objects.update_or_create(
+                user=request.user, 
+                year=year, 
+                month=month, 
+                defaults={
+                    'total_revenue': total_revenue, 
+                    'health_insurance_paid': health_insurance_paid, 
+                    'income_tax_payable': income_tax_payable
+                }
+            )
             context.update({'settlement': settlement, 'submitted': True})
+            
         current_year = datetime.now().year
-        context.update({'years': range(current_year - 5, current_year + 1), 'months': range(1, 13)})
+        context.update({
+            'years': range(current_year - 5, current_year + 1), 
+            'months': range(1, 13)
+        })
         return render(request, 'ksiegowosc/settlement_form.html', context)
-
 
 class InvoiceItemInline(admin.TabularInline):
     model = InvoiceItem
@@ -161,18 +124,12 @@ class InvoiceItemInline(admin.TabularInline):
     exclude = ('user',)
 
 @admin.register(Invoice)
-class InvoiceAdmin(ImportExportModelAdmin):
-    resource_classes = [InvoiceResource]
+class InvoiceAdmin(admin.ModelAdmin):
     inlines = [InvoiceItemInline]
     list_display = ('invoice_number', 'contractor', 'issue_date', 'total_amount', 'is_correction', 'user')
     list_filter = ('issue_date', 'contractor', 'is_correction', 'user')
     search_fields = ('invoice_number', 'contractor__name')
     exclude = ('user',)
-
-    def get_import_formats(self):
-        """Adds our custom JPKXMLFormat to the list of available formats."""
-        formats = super().get_import_formats()
-        return [JPKXMLFormat] + formats
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "contractor" and not request.user.is_superuser:
@@ -181,24 +138,454 @@ class InvoiceAdmin(ImportExportModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser: return qs
+        if request.user.is_superuser: 
+            return qs
         return qs.filter(user=request.user)
 
     def save_model(self, request, obj, form, change):
-        if not hasattr(obj, 'user') or not obj.user: obj.user = request.user
+        if not hasattr(obj, 'user') or not obj.user: 
+            obj.user = request.user
         super().save_model(request, obj, form, change)
 
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
         for instance in instances:
-            if not hasattr(instance, 'user') or not instance.user: instance.user = request.user
+            if not hasattr(instance, 'user') or not instance.user: 
+                instance.user = request.user
             instance.save()
         formset.save_m2m()
 
     def get_urls(self):
         urls = super().get_urls()
-        my_urls = [path('<int:object_id>/change/generate-pdf/', self.admin_site.admin_view(self.generate_pdf_view), name='ksiegowosc_invoice_pdf')]
+        my_urls = [
+            path('<int:object_id>/change/generate-pdf/', 
+                 self.admin_site.admin_view(self.generate_pdf_view), 
+                 name='ksiegowosc_invoice_pdf'),
+            path('import-jpk/', 
+                 self.admin_site.admin_view(self.import_jpk_view), 
+                 name='ksiegowosc_invoice_import_jpk'),
+            path('export-jpk/', 
+                 self.admin_site.admin_view(self.export_jpk_view), 
+                 name='ksiegowosc_invoice_export_jpk'),
+        ]
         return my_urls + urls
+
+    def import_jpk_view(self, request):
+        """Import faktur z pozycjami z JPK"""
+        context = dict(
+            self.admin_site.each_context(request),
+            opts=self.model._meta,
+            title='Import faktur z JPK_FA',
+            has_view_permission=self.has_view_permission(request),
+            has_add_permission=self.has_add_permission(request),
+            has_change_permission=self.has_change_permission(request),
+            has_delete_permission=self.has_delete_permission(request),
+        )
+
+        if request.method == 'POST' and request.FILES.get('xml_file'):
+            xml_file = request.FILES['xml_file']
+            
+            try:
+                if xml_file.size > 50 * 1024 * 1024:
+                    messages.error(request, "Plik za duży (max 50MB)")
+                    return render(request, 'admin/ksiegowosc/invoice/import_jpk.html', context)
+                
+                if not xml_file.name.lower().endswith('.xml'):
+                    messages.error(request, "Nieprawidłowe rozszerzenie pliku")
+                    return render(request, 'admin/ksiegowosc/invoice/import_jpk.html', context)
+
+                with transaction.atomic():
+                    created_invoices, skipped_invoices = self.parse_jpk_file(xml_file, request.user)
+                
+                if created_invoices:
+                    total_invoices = len(created_invoices)
+                    total_items = sum(items_count for invoice, items_count in created_invoices)
+                    messages.success(request, f"Pomyślnie zaimportowano {total_invoices} faktur z {total_items} pozycjami")
+                
+                if skipped_invoices:
+                    for skip_msg in skipped_invoices[:5]:
+                        messages.warning(request, skip_msg)
+                    if len(skipped_invoices) > 5:
+                        messages.warning(request, f"...i {len(skipped_invoices) - 5} innych problemów")
+
+                if created_invoices:
+                    return redirect('admin:ksiegowosc_invoice_changelist')
+                    
+            except ValueError as e:
+                messages.error(request, str(e))
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                messages.error(request, f"Nieoczekiwany błąd: {str(e)}")
+
+        return render(request, 'admin/ksiegowosc/invoice/import_jpk.html', context)
+
+    def export_jpk_view(self, request):
+        """Eksport faktur z pozycjami do CSV"""
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="faktury_z_pozycjami.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Numer faktury', 'Data wystawienia', 'Data sprzedaży', 'Kontrahent', 'NIP', 
+            'Kwota całkowita', 'Sposób płatności', 'Korekta', 'Powód korekty', 'Faktura korygowana',
+            'Pozycja 1 - Nazwa', 'Pozycja 1 - Ilość', 'Pozycja 1 - Jednostka', 'Pozycja 1 - Cena', 'Pozycja 1 - Wartość',
+            'Pozycja 2 - Nazwa', 'Pozycja 2 - Ilość', 'Pozycja 2 - Jednostka', 'Pozycja 2 - Cena', 'Pozycja 2 - Wartość',
+            'Pozycja 3 - Nazwa', 'Pozycja 3 - Ilość', 'Pozycja 3 - Jednostka', 'Pozycja 3 - Cena', 'Pozycja 3 - Wartość'
+        ])
+        
+        queryset = self.get_queryset(request)
+        for invoice in queryset:
+            items = list(invoice.items.all())
+            
+            row = [
+                invoice.invoice_number,
+                invoice.issue_date.strftime('%Y-%m-%d'),
+                invoice.sale_date.strftime('%Y-%m-%d'),
+                invoice.contractor.name,
+                invoice.contractor.tax_id,
+                str(invoice.total_amount),
+                invoice.get_payment_method_display(),
+                'Tak' if invoice.is_correction else 'Nie',
+                invoice.correction_reason or '',
+                invoice.corrected_invoice.invoice_number if invoice.corrected_invoice else '',
+            ]
+            
+            # Dodaj pozycje (maksymalnie 3)
+            for i in range(3):
+                if i < len(items):
+                    item = items[i]
+                    row.extend([
+                        item.name,
+                        str(item.quantity),
+                        item.unit,
+                        str(item.unit_price),
+                        str(item.total_price)
+                    ])
+                else:
+                    row.extend(['', '', '', '', ''])
+            
+            writer.writerow(row)
+        
+        return response
+
+    def parse_jpk_file(self, xml_file, user):
+        """Parsuje plik JPK i tworzy faktury z pozycjami"""
+        try:
+            xml_content = xml_file.read()
+            if isinstance(xml_content, bytes):
+                try:
+                    xml_content = xml_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        xml_content = xml_content.decode('windows-1250')
+                    except UnicodeDecodeError:
+                        xml_content = xml_content.decode('iso-8859-2')
+
+            if 'JPK' not in xml_content and 'Faktura' not in xml_content:
+                raise ValueError("Plik nie zawiera danych JPK_FA")
+
+            root = ET.fromstring(xml_content)
+
+            namespaces = [
+                {'tns': 'http://jpk.mf.gov.pl/wzor/2022/02/17/02171/'},
+                {'tns': 'http://jpk.mf.gov.pl/wzor/2021/03/09/03091/'},
+                {'tns': 'http://jpk.mf.gov.pl/wzor/2020/03/09/03091/'},
+                {'': ''}
+            ]
+            
+            faktury_nodes = []
+            ns = None
+            
+            for test_ns in namespaces:
+                if 'tns' in test_ns:
+                    faktury_nodes = root.findall('tns:Faktura', test_ns)
+                else:
+                    faktury_nodes = root.findall('.//Faktura')
+                    
+                if faktury_nodes:
+                    ns = test_ns
+                    break
+
+            if not faktury_nodes:
+                raise ValueError("Nie znaleziono elementów 'Faktura' w pliku JPK")
+
+            return self.process_faktury_nodes(faktury_nodes, ns, user)
+
+        except ET.ParseError as e:
+            raise ValueError(f"Błąd parsowania XML: {str(e)}")
+
+    def process_faktury_nodes(self, faktury_nodes, ns, user):
+        """Przetwarza węzły faktur z XML wraz z pozycjami"""
+        def get_text(node, paths):
+            if not isinstance(paths, list):
+                paths = [paths]
+                
+            for path in paths:
+                if 'tns' in ns and ns['tns']:
+                    found_node = node.find(f'tns:{path}', ns)
+                else:
+                    found_node = node.find(path)
+                    
+                if found_node is not None and found_node.text:
+                    return found_node.text.strip()
+            return None
+
+        def parse_date(date_str):
+            if not date_str:
+                return datetime.now().date()
+            try:
+                return datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                try:
+                    return datetime.strptime(date_str, '%d-%m-%Y').date()
+                except ValueError:
+                    return datetime.now().date()
+
+        def parse_decimal(value_str):
+            if not value_str:
+                return Decimal('0.00')
+            try:
+                cleaned_value = value_str.replace(',', '.').replace(' ', '')
+                return Decimal(cleaned_value)
+            except (InvalidOperation, ValueError):
+                return Decimal('0.00')
+
+        created_invoices = []
+        skipped_invoices = []
+
+        for faktura_node in faktury_nodes:
+            try:
+                # Pobierz dane faktury
+                invoice_number = get_text(faktura_node, ['P_2A', '2A', 'NrFaktury'])
+                buyer_nip = get_text(faktura_node, ['P_5B', '5B', 'NIP'])
+                buyer_name = get_text(faktura_node, ['P_3A', '3A', 'Nazwa'])
+                issue_date_str = get_text(faktura_node, ['P_1', '1', 'DataWystawienia'])
+                sale_date_str = get_text(faktura_node, ['P_6', '6', 'DataSprzedazy'])
+                total_amount_str = get_text(faktura_node, ['P_15', '15', 'WartoscBrutto'])
+
+                if not invoice_number or not buyer_nip:
+                    skipped_invoices.append(f"Pominięto fakturę - brak numeru lub NIP")
+                    continue
+
+                # Sprawdź czy faktura już istnieje
+                if Invoice.objects.filter(invoice_number=invoice_number).exists():
+                    skipped_invoices.append(f"Faktura {invoice_number} już istnieje")
+                    continue
+
+                # Parsuj daty i kwotę
+                issue_date = parse_date(issue_date_str)
+                sale_date = parse_date(sale_date_str)
+                total_amount = parse_decimal(total_amount_str)
+
+                # Sprawdź czy to korekta
+                is_correction = False
+                correction_reason = None
+                corrected_invoice = None
+                
+                rodzaj_node = faktura_node.find('tns:RodzajFaktury' if 'tns' in ns else 'RodzajFaktury', ns)
+                if rodzaj_node is not None and rodzaj_node.text:
+                    is_correction = 'KOREKTA' in rodzaj_node.text.upper()
+                
+                # Jeśli to korekta, szukaj dodatkowych informacji
+                if is_correction:
+                    # Powód korekty - różne możliwe pola
+                    correction_reason = get_text(faktura_node, [
+                        'P_16', 'tns:P_16', 'PowodKorekty', 'tns:PowodKorekty',
+                        'P_15A', 'tns:P_15A', 'OpisKorekty', 'tns:OpisKorekty',
+                        'UwagiKorekta', 'tns:UwagiKorekta', 'Uwagi', 'tns:Uwagi'
+                    ])
+                    
+                    # Jeśli nie ma powodu w standardowych polach, sprawdź w opisie
+                    if not correction_reason:
+                        # Spróbuj znaleźć powód w opisie usługi lub uwagach
+                        service_note = get_text(faktura_node, ['P_7', 'tns:P_7'])
+                        if service_note and ('korekta' in service_note.lower() or 'błąd' in service_note.lower()):
+                            correction_reason = service_note
+                    
+                    # Domyślny powód jeśli nic nie znaleziono
+                    if not correction_reason:
+                        correction_reason = "Korekta faktury"
+                    
+                    print(f"Powód korekty dla {invoice_number}: {correction_reason}")
+                    
+                    # Numer faktury korygowanej
+                    corrected_invoice_number = get_text(faktura_node, [
+                        'P_2B', 'tns:P_2B', 'NrFakturyKorygowanej', 'tns:NrFakturyKorygowanej',
+                        'P_2A_Kor', 'tns:P_2A_Kor', 'FakturaKorygowana', 'tns:FakturaKorygowana'
+                    ])
+                    
+                    # Spróbuj znaleźć fakturę korygowaną w systemie
+                    if corrected_invoice_number:
+                        try:
+                            corrected_invoice = Invoice.objects.get(
+                                invoice_number=corrected_invoice_number, 
+                                user=user
+                            )
+                            print(f"Znaleziono fakturę korygowaną: {corrected_invoice_number}")
+                        except Invoice.DoesNotExist:
+                            # Faktura korygowana nie istnieje - zapisz w powodzie korekty
+                            correction_reason += f" (Dotyczy faktury: {corrected_invoice_number})"
+                            print(f"Faktura korygowana {corrected_invoice_number} nie istnieje w systemie")
+
+                # Znajdź lub utwórz kontrahenta
+                contractor, created = Contractor.objects.get_or_create(
+                    tax_id=buyer_nip,
+                    user=user,
+                    defaults={'name': buyer_name or 'Brak nazwy'}
+                )
+
+                # Utwórz fakturę
+                invoice = Invoice.objects.create(
+                    user=user,
+                    invoice_number=invoice_number,
+                    issue_date=issue_date,
+                    sale_date=sale_date,
+                    contractor=contractor,
+                    total_amount=total_amount,
+                    is_correction=is_correction,
+                    correction_reason=correction_reason,
+                    corrected_invoice=corrected_invoice,
+                    payment_method='przelew'
+                )
+
+                # Sprawdź czy są pozycje faktury w JPK
+                items_created = self.process_invoice_items(faktura_node, ns, invoice, user)
+                
+                # Jeśli nie ma pozycji w JPK, utwórz domyślną pozycję
+                if items_created == 0 and total_amount > 0:
+                    InvoiceItem.objects.create(
+                        user=user,
+                        invoice=invoice,
+                        name="Usługi (import z JPK)",
+                        quantity=Decimal('1.00'),
+                        unit='szt.',
+                        unit_price=total_amount,
+                        total_price=total_amount
+                    )
+                    items_created = 1
+
+                created_invoices.append((invoice, items_created))
+
+            except Exception as e:
+                skipped_invoices.append(f"Błąd przetwarzania faktury: {str(e)}")
+                continue
+
+        return created_invoices, skipped_invoices
+
+    def process_invoice_items(self, faktura_node, ns, invoice, user):
+        """Przetwarza pozycje faktury z JPK"""
+        items_created = 0
+        
+        def get_text(node, paths):
+            if not isinstance(paths, list):
+                paths = [paths]
+                
+            for path in paths:
+                if 'tns' in ns and ns['tns']:
+                    found_node = node.find(f'tns:{path}', ns)
+                else:
+                    found_node = node.find(path)
+                    
+                if found_node is not None and found_node.text:
+                    return found_node.text.strip()
+            return None
+
+        def parse_decimal(value_str):
+            if not value_str:
+                return Decimal('1.00')
+            try:
+                cleaned_value = value_str.replace(',', '.').replace(' ', '')
+                return Decimal(cleaned_value)
+            except (InvalidOperation, ValueError):
+                return Decimal('1.00')
+
+        # 1. Sprawdź pozycję w głównym węźle faktury
+        service_desc = get_text(faktura_node, [
+            'P_7', 'tns:P_7', 'OpisUslugi', 'tns:OpisUslugi',
+            'P_12', 'tns:P_12', 'NazwaTowaru', 'tns:NazwaTowaru'
+        ])
+        
+        if service_desc:
+            quantity_str = get_text(faktura_node, ['P_8A', 'tns:P_8A'])
+            unit_str = get_text(faktura_node, ['P_8B', 'tns:P_8B'])
+            unit_price_str = get_text(faktura_node, ['P_9A', 'tns:P_9A'])
+            value_str = get_text(faktura_node, ['P_11', 'tns:P_11'])
+            
+            quantity = parse_decimal(quantity_str) if quantity_str else Decimal('1.00')
+            unit = unit_str if unit_str else 'szt.'
+            unit_price = parse_decimal(unit_price_str) if unit_price_str else Decimal('0.00')
+            total_price = parse_decimal(value_str) if value_str else Decimal('0.00')
+            
+            if total_price == 0:
+                total_price = invoice.total_amount
+            if unit_price == 0 and total_price > 0 and quantity > 0:
+                unit_price = total_price / quantity
+            
+            InvoiceItem.objects.create(
+                user=user,
+                invoice=invoice,
+                name=service_desc,
+                quantity=quantity,
+                unit=unit,
+                unit_price=unit_price,
+                total_price=total_price
+            )
+            items_created = 1
+
+        # 2. Sprawdź dedykowane węzły pozycji
+        possible_item_paths = [
+            './/FakturaWiersz', './/tns:FakturaWiersz',
+            './/Wiersz', './/tns:Wiersz',
+            './/PozycjaFaktury', './/tns:PozycjaFaktury'
+        ]
+        
+        item_nodes = []
+        for path in possible_item_paths:
+            if path.startswith('.//tns:'):
+                found_items = faktura_node.findall(path, ns)
+            else:
+                found_items = faktura_node.findall(path)
+            if found_items:
+                item_nodes = found_items
+                break
+        
+        for i, item_node in enumerate(item_nodes):
+            try:
+                item_name = get_text(item_node, [
+                    'P_7', 'tns:P_7', 'NazwaTowaru', 'tns:NazwaTowaru', 
+                    'Nazwa', 'tns:Nazwa'
+                ]) or f"Pozycja {i+1}"
+                
+                quantity_str = get_text(item_node, ['P_8A', 'tns:P_8A'])
+                unit_str = get_text(item_node, ['P_8B', 'tns:P_8B'])
+                unit_price_str = get_text(item_node, ['P_9A', 'tns:P_9A'])
+                value_str = get_text(item_node, ['P_11', 'tns:P_11'])
+                
+                quantity = parse_decimal(quantity_str) if quantity_str else Decimal('1.00')
+                unit = unit_str if unit_str else 'szt.'
+                unit_price = parse_decimal(unit_price_str) if unit_price_str else Decimal('0.00')
+                total_price = parse_decimal(value_str) if value_str else (quantity * unit_price)
+                
+                if unit_price == 0 and total_price > 0 and quantity > 0:
+                    unit_price = total_price / quantity
+                
+                InvoiceItem.objects.create(
+                    user=user,
+                    invoice=invoice,
+                    name=item_name,
+                    quantity=quantity,
+                    unit=unit,
+                    unit_price=unit_price,
+                    total_price=total_price
+                )
+                items_created += 1
+                
+            except Exception as e:
+                print(f"Błąd przetwarzania pozycji {i+1}: {str(e)}")
+                continue
+        
+        return items_created
 
     def generate_pdf_view(self, request, object_id):
         queryset = self.get_queryset(request)
@@ -207,13 +594,21 @@ class InvoiceAdmin(ImportExportModelAdmin):
         except Invoice.DoesNotExist:
             messages.error(request, "Faktura nie została znaleziona lub nie masz do niej uprawnień.")
             return redirect(request.META.get('HTTP_REFERER', '/admin/'))
+            
         company_info = CompanyInfo.objects.filter(user=request.user).first()
         if not company_info:
             messages.error(request, "Nie można wygenerować PDF. Uzupełnij najpierw dane firmy w panelu.")
             return redirect(request.META.get('HTTP_REFERER', '/admin/'))
-        html_string = render_to_string('ksiegowosc/invoice_pdf_template.html', {'invoice': invoice, 'company_info': company_info})
+            
+        html_string = render_to_string('ksiegowosc/invoice_pdf_template.html', {
+            'invoice': invoice, 
+            'company_info': company_info
+        })
         html = HTML(string=html_string)
         pdf = html.write_pdf()
+        
         response = HttpResponse(pdf, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="faktura-{invoice.invoice_number.replace("/", "_")}.pdf"'
         return response
+
+# InvoiceItem nie jest rejestrowany w admin - tylko jako inline w Invoice

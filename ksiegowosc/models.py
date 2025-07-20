@@ -3,6 +3,7 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
+from datetime import timedelta
 
 class CompanyInfo(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
@@ -25,14 +26,15 @@ class Contractor(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
     name = models.CharField(max_length=255, verbose_name="Nazwa kontrahenta")
     tax_id = models.CharField(max_length=20, verbose_name="NIP", blank=True, null=True, help_text="Wypełnij, jeśli dotyczy")
-    street = models.CharField(max_length=255, verbose_name="Ulica i numer")
-    zip_code = models.CharField(max_length=10, verbose_name="Kod pocztowy")
-    city = models.CharField(max_length=100, verbose_name="Miasto")
+    street = models.CharField(max_length=255, verbose_name="Ulica i numer", blank=True, default="")
+    zip_code = models.CharField(max_length=10, verbose_name="Kod pocztowy", blank=True, default="")
+    city = models.CharField(max_length=100, verbose_name="Miasto", blank=True, default="")
 
     class Meta:
         verbose_name = "Kontrahent"
         verbose_name_plural = "Kontrahenci"
         ordering = ['name']
+        unique_together = ['user', 'tax_id']  # Zapobiega duplikatom NIP per użytkownik
 
     def __str__(self):
         return self.name
@@ -44,8 +46,13 @@ class Invoice(models.Model):
     sale_date = models.DateField(default=timezone.now, verbose_name="Data sprzedaży")
     contractor = models.ForeignKey(Contractor, on_delete=models.PROTECT, verbose_name="Kontrahent")
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Kwota całkowita")
-    payment_method = models.CharField(max_length=50, choices=[('przelew', 'Przelew'), ('gotówka', 'Gotówka')], default='przelew', verbose_name="Sposób płatności")
-    payment_date = models.DateField(verbose_name="Termin płatności")
+    payment_method = models.CharField(
+        max_length=50, 
+        choices=[('przelew', 'Przelew'), ('gotówka', 'Gotówka')], 
+        default='przelew', 
+        verbose_name="Sposób płatności"
+    )
+    payment_date = models.DateField(verbose_name="Termin płatności", blank=True, null=True)
     notes = models.TextField(blank=True, null=True, verbose_name="Uwagi")
     is_correction = models.BooleanField(default=False, verbose_name="Czy to korekta?")
     correction_reason = models.TextField(blank=True, null=True, verbose_name="Przyczyna korekty")
@@ -57,6 +64,7 @@ class Invoice(models.Model):
         related_name='corrections',
         verbose_name="Faktura korygowana"
      )
+
     class Meta:
         verbose_name = "Faktura"
         verbose_name_plural = "Faktury"
@@ -64,6 +72,12 @@ class Invoice(models.Model):
 
     def __str__(self):
         return f"Faktura {self.invoice_number} dla {self.contractor.name}"
+
+    def save(self, *args, **kwargs):
+        # Automatycznie ustaw payment_date jeśli nie jest ustawione
+        if not self.payment_date:
+            self.payment_date = self.issue_date + timedelta(days=14)  # 14 dni termin płatności
+        super().save(*args, **kwargs)
 
     def update_total_amount(self):
         """Metoda do aktualizacji sumy faktury na podstawie jej pozycji."""
@@ -114,7 +128,7 @@ class MonthlySettlement(models.Model):
     class Meta:
         verbose_name = "Rozliczenie miesięczne"
         verbose_name_plural = "Rozliczenia miesięczne"
-        unique_together = ('year', 'month') # Zapewnia, że można rozliczyć dany miesiąc tylko raz
+        unique_together = ('year', 'month', 'user')  # Dodano user do unique_together
         ordering = ['-year', '-month']
 
     def __str__(self):
