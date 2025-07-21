@@ -8,10 +8,30 @@
         </a>
     </li>
     <li>
-        <a href="{% url 'admin:ksiegowosc_invoice_export_jpk' %}" class="btn btn-success">
+        <a href="{% url 'admin:ksiegowosc_invoice_export_jpk' %}" class="btn btn-success" id="export-jpk-btn">
             <i class="fas fa-file-export"></i>
-            Eksportuj do CSV
+            Eksportuj zaznaczone do JPK
         </a>
     </li>
     {{ block.super }}
+{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const exportBtn = document.getElementById('export-jpk-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function(event) {
+            event.preventDefault();
+            const selected = Array.from(document.querySelectorAll('#result_list input.action-select:checked')).map(cb => cb.value);
+            if (selected.length === 0) {
+                alert('Proszę zaznaczyć przynajmniej jedną fakturę do eksportu.');
+                return;
+            }
+            const url = this.href + '?ids=' + selected.join(',');
+            window.location.href = url;
+        });
+    }
+});
+</script>
 {% endblock %}
