@@ -148,27 +148,13 @@ class ContractorAdmin(admin.ModelAdmin):
 class MonthlySettlementAdmin(admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/monthlysettlement/change_list.html"
     list_display = ('year', 'month', 'total_revenue', 'income_tax_payable', 'user')
-    # ... (reszta konfiguracji i metod save/get_queryset bez zmian) ...
 
     def get_urls(self):
         urls = super().get_urls()
         my_urls = [
             path('oblicz/', self.admin_site.admin_view(self.calculate_view), name='ksiegowosc_monthlysettlement_calculate'),
-            # This is the correct place for this line
-            path('api/get-zus-defaults/', self.admin_site.admin_view(self.get_zus_defaults_view), name='ksiegowosc_get_zus_defaults'),
         ]
         return my_urls + urls
-
-    def get_zus_defaults_view(self, request):
-        """Zwraca domyślne składki ZUS w formacie JSON."""
-        company_info = CompanyInfo.objects.filter(user=request.user).first()
-        if company_info:
-            data = {
-                'social_insurance': company_info.default_social_insurance,
-                'labor_fund': company_info.default_labor_fund,
-            }
-            return JsonResponse(data)
-        return JsonResponse({'social_insurance': '0.00', 'labor_fund': '0.00'})
 
     def calculate_view(self, request):
         context = {
@@ -211,6 +197,16 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
         context.update({'years': range(current_year - 5, current_year + 1), 'months': range(1, 13)})
         return render(request, 'ksiegowosc/settlement_form.html', context)
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, 'user') or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 class InvoiceItemInline(admin.TabularInline):
     model = InvoiceItem

@@ -5,6 +5,20 @@
 <div class="container-fluid pt-3">
     <h1 class="mb-4">Rozliczenie Miesięczne</h1>
 
+    <!-- Informacja o aktualnych stawkach ZUS -->
+    <div class="mb-4" style="background-color: #f7f9fc; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem;">
+        <h5><i class="fas fa-info-circle"></i> Aktualne stawki składek ZUS</h5>
+        <p class="mb-2">Aktualne wysokości składek społecznych i na Fundusz Pracy znajdziesz na stronie ZUS:</p>
+        <a href="https://www.zus.pl/baza-wiedzy/skladki-wskazniki-odsetki/skladki/wysokosc-skladek-na-ubezpieczenia-spoleczne" 
+           target="_blank" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-external-link-alt"></i> Zobacz aktualne stawki ZUS
+        </a>
+        <hr class="mt-3">
+        <small class="text-muted">
+            <strong>Przypomnienie:</strong> Wprowadź rzeczywiste kwoty składek, które opłaciłeś w danym miesiącu.
+        </small>
+    </div>
+
     <div class="card mb-4">
         <div class="card-body">
             <h5 class="card-title">Wybierz okres i wprowadź opłacone składki</h5>
@@ -25,20 +39,34 @@
                     </div>
 
                     <div class="col-md-2">
-                        <label for="social-input" class="form-label">Składka Społeczna</label>
-                        <input type="text" name="social_insurance_paid" id="social-input" class="form-control" value="0.00">
+                        <label for="social-input" class="form-label">
+                            Składka Społeczna
+                            <small class="text-muted">(PLN)</small>
+                        </label>
+                        <input type="text" name="social_insurance_paid" id="social-input" 
+                               class="form-control" value="0.00" placeholder="np. 250.00">
                     </div>
                     <div class="col-md-2">
-                        <label for="labor-input" class="form-label">Fundusz Pracy</label>
-                        <input type="text" name="labor_fund_paid" id="labor-input" class="form-control" value="0.00">
+                        <label for="labor-input" class="form-label">
+                            Fundusz Pracy
+                            <small class="text-muted">(PLN)</small>
+                        </label>
+                        <input type="text" name="labor_fund_paid" id="labor-input" 
+                               class="form-control" value="0.00" placeholder="np. 25.00">
                     </div>
                     <div class="col-md-2">
-                        <label for="health-input" class="form-label">Składka Zdrowotna</label>
-                        <input type="text" name="health_insurance_paid" id="health-input" class="form-control" value="0.00">
+                        <label for="health-input" class="form-label">
+                            Składka Zdrowotna
+                            <small class="text-muted">(PLN)</small>
+                        </label>
+                        <input type="text" name="health_insurance_paid" id="health-input" 
+                               class="form-control" value="0.00" placeholder="np. 150.00">
                     </div>
 
                     <div class="col-md-2">
-                        <button type="submit" class="btn btn-primary w-100">Oblicz</button>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-calculator"></i> Oblicz
+                        </button>
                     </div>
                 </div>
             </form>
@@ -46,38 +74,21 @@
     </div>
 
     {% if submitted %}
+        <div class="alert alert-success">
+            <h5><i class="fas fa-check-circle"></i> Rozliczenie zostało zapisane!</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Okres:</strong> {{ settlement.month }}/{{ settlement.year }}</p>
+                    <p><strong>Przychód w miesiącu:</strong> {{ settlement.total_revenue }} PLN</p>
+                    <p><strong>Składka społeczna:</strong> {{ settlement.social_insurance_paid }} PLN</p>
+                    <p><strong>Fundusz Pracy:</strong> {{ settlement.labor_fund_paid }} PLN</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Składka zdrowotna:</strong> {{ settlement.health_insurance_paid }} PLN</p>
+                    <p class="text-success"><strong>Podatek do zapłaty:</strong> {{ settlement.income_tax_payable }} PLN</p>
+                </div>
+            </div>
+        </div>
     {% endif %}
 </div>
-{% endblock %}
-
-{% block extrajs %}
-{{ block.super }}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const yearSelect = document.getElementById('year-select');
-    const monthSelect = document.getElementById('month-select');
-    const socialInput = document.getElementById('social-input');
-    const laborInput = document.getElementById('labor-input');
-
-    function fetchZusDefaults() {
-        // Używamy tego URL-a, który zdefiniowaliśmy w admin.py
-        const url = "{% url 'admin:ksiegowosc_monthlysettlement_get_zus_defaults' %}";
-
-        fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                socialInput.value = data.social_insurance;
-                laborInput.value = data.labor_fund;
-            })
-            .catch(error => console.error('Error fetching ZUS defaults:', error));
-    }
-
-    // Wywołaj funkcję przy zmianie roku lub miesiąca
-    yearSelect.addEventListener('change', fetchZusDefaults);
-    monthSelect.addEventListener('change', fetchZusDefaults);
-
-    // Wywołaj raz na początku, aby załadować domyślne wartości
-    fetchZusDefaults();
-});
-</script>
 {% endblock %}
