@@ -697,3 +697,55 @@ class MonthlySettlement(models.Model):
 
     def __str__(self):
         return f"Rozliczenie za {self.month}/{self.year}"
+
+class YearlySettlement(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    year = models.IntegerField(verbose_name="Rok")
+
+    # Sumy z całego roku
+    total_yearly_revenue = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Łączny przychód roczny")
+    total_social_insurance_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Łączne składki społeczne")
+    total_health_insurance_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Łączne składki zdrowotne")
+    total_labor_fund_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Łączne składki na Fundusz Pracy")
+
+    # Obliczone podatki
+    total_monthly_tax_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Suma podatków z rozliczeń miesięcznych")
+    calculated_yearly_tax = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Obliczony podatek roczny")
+
+    # Różnica - dopłata lub zwrot
+    tax_difference = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Różnica (dopłata/zwrot)")
+
+    # Stawka podatku użyta do obliczeń
+    tax_rate_used = models.DecimalField(max_digits=4, decimal_places=2, default=14.00, verbose_name="Stawka podatku (%)")
+
+    # Dodatkowe informacje
+    notes = models.TextField(blank=True, null=True, verbose_name="Uwagi")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Rozliczenie roczne"
+        verbose_name_plural = "Rozliczenia roczne"
+        unique_together = ('year', 'user')
+        ordering = ['-year']
+
+    def __str__(self):
+        return f"Rozliczenie roczne {self.year} - {self.user.username}"
+
+    @property
+    def is_overpaid(self):
+        """Zwraca True jeśli zapłacono za dużo (zwrot)"""
+        return self.tax_difference < 0
+
+    @property
+    def is_underpaid(self):
+        """Zwraca True jeśli zapłacono za mało (dopłata)"""
+        return self.tax_difference > 0
+
+    def get_settlement_type_display(self):
+        """Zwraca opis typu rozliczenia"""
+        if self.is_overpaid:
+            return f"Zwrot: {abs(self.tax_difference)} PLN"
+        elif self.is_underpaid:
+            return f"Dopłata: {self.tax_difference} PLN"
+        else:
+            return "Rozliczenie bez dopłat i zwrotów"

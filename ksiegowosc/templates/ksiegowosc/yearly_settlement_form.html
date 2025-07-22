@@ -1,0 +1,229 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="container-fluid pt-3">
+    <h1 class="mb-4">
+        <i class="fas fa-calendar-alt"></i> Rozliczenie Roczne
+    </h1>
+
+    <!-- Informacja o rozliczeniu rocznym -->
+    <div class="mb-4" style="background-color: #f7f9fc; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem;">
+        <h5><i class="fas fa-info-circle"></i> Rozliczenie roczne - ryczałt ewidencjonowany</h5>
+        <p class="mb-2">Rozliczenie roczne oblicza końcowy podatek na podstawie wszystkich rozliczeń miesięcznych z danego roku.</p>
+        <div class="row">
+            <div class="col-md-6">
+                <small class="text-muted">
+                    <strong>Podstawa opodatkowania:</strong> Przychody - składki społeczne - 50% składki zdrowotnej
+                </small>
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted">
+                    <strong>Wynik:</strong> Dopłata (jeśli obliczony podatek > zapłacony) lub Zwrot (jeśli zapłacono za dużo)
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Oblicz rozliczenie roczne</h5>
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="row align-items-end">
+                            <div class="col-md-3">
+                                <label for="year-select" class="form-label">Rok rozliczeniowy</label>
+                                <select name="year" id="year-select" class="form-select" required>
+                                    <option value="">-- Wybierz rok --</option>
+                                    {% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="tax-rate-input" class="form-label">
+                                    Stawka ryczałtu
+                                    <small class="text-muted">(%)</small>
+                                </label>
+                                <input type="text" name="tax_rate" id="tax-rate-input" 
+                                       class="form-control" value="{{ default_tax_rate }}" 
+                                       placeholder="14.00" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="notes-input" class="form-label">Uwagi (opcjonalnie)</label>
+                                <input type="text" name="notes" id="notes-input" 
+                                       class="form-control" placeholder="np. podstawa prawna">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-calculator"></i> Oblicz
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Popularne stawki ryczałtu</h6>
+                    <div class="small">
+                        <div class="mb-1"><strong>14%</strong> - usługi IT, konsulting</div>
+                        <div class="mb-1"><strong>12%</strong> - wolne zawody</div>
+                        <div class="mb-1"><strong>8,5%</strong> - niektóre usługi</div>
+                        <div class="mb-1"><strong>3%</strong> - określone świadczenia</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if submitted %}
+        <div class="row">
+            <div class="col-12">
+                {% if yearly_settlement.is_overpaid %}
+                    <div class="alert alert-success">
+                        <h5><i class="fas fa-money-bill-wave"></i> Możliwy zwrot podatku!</h5>
+                        <p>Zapłaciłeś więcej niż wynosi obliczony podatek roczny.</p>
+                        <p class="mb-0"><strong>Kwota zwrotu: {{ yearly_settlement.tax_difference|floatformat:2|slice:"1:" }} PLN</strong></p>
+                    </div>
+                {% elif yearly_settlement.is_underpaid %}
+                    <div class="alert alert-warning">
+                        <h5><i class="fas fa-exclamation-triangle"></i> Wymagana dopłata</h5>
+                        <p>Obliczony podatek roczny jest wyższy od zapłaconego w rozliczeniach miesięcznych.</p>
+                        <p class="mb-0"><strong>Kwota dopłaty: {{ yearly_settlement.tax_difference|floatformat:2 }} PLN</strong></p>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <h5><i class="fas fa-balance-scale"></i> Rozliczenie bez dopłat</h5>
+                        <p class="mb-0">Zapłacony podatek jest równy obliczonemu podatkowi rocznemu.</p>
+                    </div>
+                {% endif %}
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-bar"></i> Podsumowanie rozliczenia rocznego {{ yearly_settlement.year }}</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Łączny przychód roczny:</strong></td>
+                                            <td class="text-end">{{ yearly_settlement.total_yearly_revenue|floatformat:2 }} PLN</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Składki społeczne:</td>
+                                            <td class="text-end">{{ yearly_settlement.total_social_insurance_paid|floatformat:2 }} PLN</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Składki zdrowotne:</td>
+                                            <td class="text-end">{{ yearly_settlement.total_health_insurance_paid|floatformat:2 }} PLN</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Fundusz Pracy:</td>
+                                            <td class="text-end">{{ yearly_settlement.total_labor_fund_paid|floatformat:2 }} PLN</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td>Stawka podatku:</td>
+                                            <td class="text-end">{{ yearly_settlement.tax_rate_used }}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Zapłacone w rozliczeniach miesięcznych:</td>
+                                            <td class="text-end">{{ yearly_settlement.total_monthly_tax_paid|floatformat:2 }} PLN</td>
+                                        </tr>
+                                        <tr class="table-info">
+                                            <td><strong>Obliczony podatek roczny:</strong></td>
+                                            <td class="text-end"><strong>{{ yearly_settlement.calculated_yearly_tax|floatformat:2 }} PLN</strong></td>
+                                        </tr>
+                                        <tr class="{% if yearly_settlement.is_overpaid %}table-success{% elif yearly_settlement.is_underpaid %}table-warning{% else %}table-light{% endif %}">
+                                            <td><strong>Różnica (dopłata/zwrot):</strong></td>
+                                            <td class="text-end"><strong>
+                                                {% if yearly_settlement.tax_difference > 0 %}
+                                                    +{{ yearly_settlement.tax_difference|floatformat:2 }} PLN
+                                                {% elif yearly_settlement.tax_difference < 0 %}
+                                                    {{ yearly_settlement.tax_difference|floatformat:2 }} PLN
+                                                {% else %}
+                                                    0.00 PLN
+                                                {% endif %}
+                                            </strong></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {% if yearly_settlement.notes %}
+                            <div class="mt-3">
+                                <strong>Uwagi:</strong> {{ yearly_settlement.notes }}
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Przycisk do PDF -->
+                        <div class="mt-3 text-center">
+                            <a href="{% url 'admin:ksiegowosc_yearlysettlement_pdf' yearly_settlement.id %}" 
+                               class="btn btn-success" target="_blank">
+                                <i class="fas fa-file-pdf"></i> Generuj PDF z rozliczeniem
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Szczegóły miesięczne -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-list"></i> Szczegóły z rozliczeń miesięcznych</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Miesiąc</th>
+                                        <th class="text-end">Przychód</th>
+                                        <th class="text-end">Składka społeczna</th>
+                                        <th class="text-end">Składka zdrowotna</th>
+                                        <th class="text-end">Fundusz Pracy</th>
+                                        <th class="text-end">Podatek</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for settlement in monthly_settlements %}
+                                    <tr>
+                                        <td>{{ settlement.month }}/{{ settlement.year }}</td>
+                                        <td class="text-end">{{ settlement.total_revenue|floatformat:2 }}</td>
+                                        <td class="text-end">{{ settlement.social_insurance_paid|floatformat:2 }}</td>
+                                        <td class="text-end">{{ settlement.health_insurance_paid|floatformat:2 }}</td>
+                                        <td class="text-end">{{ settlement.labor_fund_paid|floatformat:2 }}</td>
+                                        <td class="text-end">{{ settlement.income_tax_payable|floatformat:2 }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <th><strong>SUMA:</strong></th>
+                                        <th class="text-end"><strong>{{ yearly_settlement.total_yearly_revenue|floatformat:2 }} PLN</strong></th>
+                                        <th class="text-end"><strong>{{ yearly_settlement.total_social_insurance_paid|floatformat:2 }} PLN</strong></th>
+                                        <th class="text-end"><strong>{{ yearly_settlement.total_health_insurance_paid|floatformat:2 }} PLN</strong></th>
+                                        <th class="text-end"><strong>{{ yearly_settlement.total_labor_fund_paid|floatformat:2 }} PLN</strong></th>
+                                        <th class="text-end"><strong>{{ yearly_settlement.total_monthly_tax_paid|floatformat:2 }} PLN</strong></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

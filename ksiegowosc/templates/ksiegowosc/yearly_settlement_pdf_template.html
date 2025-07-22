@@ -1,0 +1,288 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            @page {
+                size: A4;
+                margin: 1.5cm;
+            }
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 11pt;
+                line-height: 1.4;
+                color: #000;
+            }
+            h1 {
+                font-size: 18pt;
+                text-align: center;
+                margin: 1cm 0;
+                font-weight: bold;
+                text-transform: uppercase;
+                color: #2c3e50;
+            }
+            h2 {
+                font-size: 14pt;
+                margin: 0.8cm 0 0.4cm 0;
+                font-weight: bold;
+                color: #34495e;
+                border-bottom: 2px solid #3498db;
+                padding-bottom: 3px;
+            }
+            .header-info {
+                background-color: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+                margin-bottom: 20px;
+                border: 1px solid #dee2e6;
+            }
+            .company-info {
+                margin-bottom: 20px;
+                padding: 10px;
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                border-radius: 3px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 15px;
+                font-size: 10pt;
+            }
+            th, td {
+                border: 1px solid #000;
+                padding: 8px;
+                text-align: left;
+                vertical-align: top;
+            }
+            th {
+                background-color: #f5f5f5;
+                font-weight: bold;
+                text-align: center;
+                font-size: 9pt;
+                text-transform: uppercase;
+            }
+            .text-end {
+                text-align: right;
+            }
+            .text-center {
+                text-align: center;
+            }
+            .summary-table {
+                margin-top: 20px;
+                border: 2px solid #2c3e50;
+            }
+            .summary-table th {
+                background-color: #34495e;
+                color: white;
+                font-size: 10pt;
+            }
+            .summary-table .total-row {
+                background-color: #ecf0f1;
+                font-weight: bold;
+                font-size: 11pt;
+            }
+            .tax-calculation {
+                background-color: #e8f4fd;
+                padding: 15px;
+                margin: 20px 0;
+                border-radius: 5px;
+                border: 1px solid #3498db;
+            }
+            .result-box {
+                text-align: center;
+                padding: 20px;
+                margin: 20px 0;
+                border-radius: 8px;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+            .result-overpaid {
+                background-color: #d4edda;
+                border: 2px solid #28a745;
+                color: #155724;
+            }
+            .result-underpaid {
+                background-color: #fff3cd;
+                border: 2px solid #ffc107;
+                color: #856404;
+            }
+            .result-balanced {
+                background-color: #d1ecf1;
+                border: 2px solid #17a2b8;
+                color: #0c5460;
+            }
+            .monthly-details {
+                margin-top: 25px;
+            }
+            .monthly-details th {
+                background-color: #6c757d;
+                color: white;
+            }
+            .monthly-details .sum-row {
+                background-color: #f8f9fa;
+                font-weight: bold;
+                border-top: 2px solid #495057;
+            }
+            .footer-info {
+                margin-top: 30px;
+                font-size: 9pt;
+                color: #6c757d;
+                text-align: center;
+                border-top: 1px solid #dee2e6;
+                padding-top: 15px;
+            }
+            .calculation-steps {
+                font-size: 10pt;
+                line-height: 1.6;
+                background-color: #f8f9fa;
+                padding: 10px;
+                border-radius: 3px;
+                margin: 10px 0;
+            }
+        </style>
+    </head>
+    <body>
+
+        <!-- Nagłówek -->
+        <div class="header-info">
+            <div style="float: right; font-size: 10pt;">
+                <strong>Data wygenerowania:</strong> {{ "now"|date:"d.m.Y H:i" }}<br>
+            </div>
+            <div style="clear: both;"></div>
+        </div>
+
+        <h1>Rozliczenie Roczne {{ yearly_settlement.year }}</h1>
+
+        <!-- Dane firmy -->
+        <div class="company-info">
+            <strong style="font-size: 12pt;">{{ company_info.company_name }}</strong><br>
+            {{ company_info.street }}<br>
+            {{ company_info.zip_code }} {{ company_info.city }}<br>
+            <strong>NIP:</strong> {{ company_info.tax_id }}
+        </div>
+
+        <!-- Podsumowanie -->
+        <h2>Podsumowanie Roczne</h2>
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th style="width: 60%;">Pozycja</th>
+                    <th style="width: 40%;">Kwota (PLN)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Łączny przychód roczny</strong></td>
+                    <td class="text-end">{{ yearly_settlement.total_yearly_revenue|floatformat:2 }}</td>
+                </tr>
+                <tr>
+                    <td>Składki społeczne (odliczalne)</td>
+                    <td class="text-end">{{ yearly_settlement.total_social_insurance_paid|floatformat:2 }}</td>
+                </tr>
+                <tr>
+                    <td>Składki zdrowotne (50% odliczalne)</td>
+                    <td class="text-end">{{ yearly_settlement.total_health_insurance_paid|floatformat:2 }}</td>
+                </tr>
+                <tr>
+                    <td>Fundusz Pracy</td>
+                    <td class="text-end">{{ yearly_settlement.total_labor_fund_paid|floatformat:2 }}</td>
+                </tr>
+                <tr class="total-row">
+                    <td><strong>Zapłacone podatki w rozliczeniach miesięcznych</strong></td>
+                    <td class="text-end"><strong>{{ yearly_settlement.total_monthly_tax_paid|floatformat:2 }}</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Obliczenia podatku -->
+        <div class="tax-calculation">
+            <h2 style="margin-top: 0; border: none; font-size: 12pt;">Obliczenie podatku rocznego</h2>
+            <div class="calculation-steps">
+                1. <strong>Podstawa opodatkowania:</strong><br>
+                &nbsp;&nbsp;&nbsp; {{ yearly_settlement.total_yearly_revenue|floatformat:2 }} PLN (przychód) 
+                - {{ yearly_settlement.total_social_insurance_paid|floatformat:2 }} PLN (składki społeczne)
+                - {{ yearly_settlement.total_health_insurance_paid|floatformat:2 }} PLN (50% składki zdrowotnej)<br><br>
+                
+                2. <strong>Podatek według stawki {{ yearly_settlement.tax_rate_used }}%:</strong><br>
+                &nbsp;&nbsp;&nbsp; <strong>{{ yearly_settlement.calculated_yearly_tax|floatformat:2 }} PLN</strong><br><br>
+                
+                3. <strong>Różnica z zapłaconymi podatkami miesięcznymi:</strong><br>
+                &nbsp;&nbsp;&nbsp; {{ yearly_settlement.calculated_yearly_tax|floatformat:2 }} PLN - {{ yearly_settlement.total_monthly_tax_paid|floatformat:2 }} PLN = <strong>{{ yearly_settlement.tax_difference|floatformat:2 }} PLN</strong>
+            </div>
+        </div>
+
+        <!-- Wynik -->
+        {% if yearly_settlement.is_overpaid %}
+            <div class="result-box result-overpaid">
+                <i>💰</i> MOŻLIWY ZWROT PODATKU<br>
+                <span style="font-size: 16pt;">{{ yearly_settlement.tax_difference|floatformat:2|slice:"1:" }} PLN</span><br>
+                <small>(zapłacono więcej niż wynosi obliczony podatek roczny)</small>
+            </div>
+        {% elif yearly_settlement.is_underpaid %}
+            <div class="result-box result-underpaid">
+                <i>⚠️</i> WYMAGANA DOPŁATA<br>
+                <span style="font-size: 16pt;">{{ yearly_settlement.tax_difference|floatformat:2 }} PLN</span><br>
+                <small>(obliczony podatek roczny jest wyższy od zapłaconego)</small>
+            </div>
+        {% else %}
+            <div class="result-box result-balanced">
+                <i>⚖️</i> ROZLICZENIE BEZ DOPŁAT<br>
+                <span style="font-size: 16pt;">0.00 PLN</span><br>
+                <small>(zapłacony podatek jest równy obliczonemu)</small>
+            </div>
+        {% endif %}
+
+        <!-- Szczegóły miesięczne -->
+        <div class="monthly-details">
+            <h2>Szczegóły z rozliczeń miesięcznych {{ yearly_settlement.year }}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">Miesiąc</th>
+                        <th style="width: 18%;">Przychód</th>
+                        <th style="width: 17%;">Składka społeczna</th>
+                        <th style="width: 17%;">Składka zdrowotna</th>
+                        <th style="width: 16%;">Fundusz Pracy</th>
+                        <th style="width: 20%;">Podatek</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for settlement in monthly_settlements %}
+                    <tr>
+                        <td class="text-center">{{ settlement.month }}/{{ settlement.year }}</td>
+                        <td class="text-end">{{ settlement.total_revenue|floatformat:2 }}</td>
+                        <td class="text-end">{{ settlement.social_insurance_paid|floatformat:2 }}</td>
+                        <td class="text-end">{{ settlement.health_insurance_paid|floatformat:2 }}</td>
+                        <td class="text-end">{{ settlement.labor_fund_paid|floatformat:2 }}</td>
+                        <td class="text-end">{{ settlement.income_tax_payable|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="sum-row">
+                        <td class="text-center"><strong>SUMA:</strong></td>
+                        <td class="text-end"><strong>{{ yearly_settlement.total_yearly_revenue|floatformat:2 }}</strong></td>
+                        <td class="text-end"><strong>{{ yearly_settlement.total_social_insurance_paid|floatformat:2 }}</strong></td>
+                        <td class="text-end"><strong>{{ yearly_settlement.total_health_insurance_paid|floatformat:2 }}</strong></td>
+                        <td class="text-end"><strong>{{ yearly_settlement.total_labor_fund_paid|floatformat:2 }}</strong></td>
+                        <td class="text-end"><strong>{{ yearly_settlement.total_monthly_tax_paid|floatformat:2 }}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        {% if yearly_settlement.notes %}
+            <div style="margin-top: 20px; padding: 10px; background-color: #f8f9fa; border-radius: 3px;">
+                <strong>Uwagi:</strong> {{ yearly_settlement.notes }}
+            </div>
+        {% endif %}
+
+        <div class="footer-info">
+            <strong>Rozliczenie roczne {{ yearly_settlement.year }} - {{ company_info.company_name }}</strong><br>
+            Dokument wygenerowany automatycznie | Stawka ryczałtu: {{ yearly_settlement.tax_rate_used }}%<br>
+            Strona 1 z 1
+        </div>
+
+    </body>
+</html>
