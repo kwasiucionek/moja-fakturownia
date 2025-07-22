@@ -1,53 +1,83 @@
-{% extends "ksiegowosc/base.html" %}
+{% extends "admin/base_site.html" %}
+{% load i18n %}
 
-{% block title %}Rozliczenie Miesięczne{% endblock %}
+{% block content %}
+<div class="container-fluid pt-3">
+    <h1 class="mb-4">Rozliczenie Miesięczne</h1>
 
-{% block page_content %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Wybierz okres i wprowadź opłacone składki</h5>
+            <form method="post">
+                {% csrf_token %}
+                <div class="row align-items-end">
+                    <div class="col-md-2">
+                        <label for="year-select" class="form-label">Rok</label>
+                        <select name="year" id="year-select" class="form-select">
+                            {% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="month-select" class="form-label">Miesiąc</label>
+                        <select name="month" id="month-select" class="form-select">
+                            {% for m in months %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+                        </select>
+                    </div>
 
-<h1 class="mb-4">Rozliczenie Miesięczne</h1>
+                    <div class="col-md-2">
+                        <label for="social-input" class="form-label">Składka Społeczna</label>
+                        <input type="text" name="social_insurance_paid" id="social-input" class="form-control" value="0.00">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="labor-input" class="form-label">Fundusz Pracy</label>
+                        <input type="text" name="labor_fund_paid" id="labor-input" class="form-control" value="0.00">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="health-input" class="form-label">Składka Zdrowotna</label>
+                        <input type="text" name="health_insurance_paid" id="health-input" class="form-control" value="0.00">
+                    </div>
 
-<div class="card mb-4">
-    <div class="card-body">
-        <h5 class="card-title">Wybierz okres do rozliczenia</h5>
-        <form method="post">
-            {% csrf_token %}
-            <div class="row align-items-end">
-                <div class="col-md-3">
-                    <label for="year" class="form-label">Rok</label>
-                    <select name="year" id="year" class="form-select">
-                        {% for y in years %}
-                        <option value="{{ y }}" {% if y == request.POST.year|add:0 %}selected{% endif %}>{{ y }}</option>
-                        {% endfor %}
-                    </select>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">Oblicz</button>
+                    </div>
                 </div>
-                <div class="col-md-3">
-                    <label for="month" class="form-label">Miesiąc</label>
-                    <select name="month" id="month" class="form-select">
-                        {% for m in months %}
-                        <option value="{{ m }}" {% if m == request.POST.month|add:0 %}selected{% endif %}>{{ m }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label for="health_insurance_paid" class="form-label">Opłacona składka zdrowotna</label>
-                    <input type="text" name="health_insurance_paid" id="health_insurance_paid" class="form-control" value="{{ request.POST.health_insurance_paid }}">
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary w-100">Oblicz</button>
-                </div>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
-</div>
 
-{% if submitted %}
-<div class="alert alert-success">
-    <h4 class="alert-heading">Wyniki rozliczenia za {{ settlement.month }}/{{ settlement.year }}</h4>
-    <p><strong>Całkowity przychód:</strong> {{ settlement.total_revenue|floatformat:2 }} PLN</p>
-    <p><strong>Należny podatek dochodowy (ryczałt 14%):</strong> {{ settlement.income_tax_payable|floatformat:2 }} PLN</p>
-    <hr>
-    <p class="mb-0">Rozliczenie zostało zapisane w systemie.</p>
+    {% if submitted %}
+    {% endif %}
 </div>
-{% endif %}
+{% endblock %}
 
+{% block extrajs %}
+{{ block.super }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const yearSelect = document.getElementById('year-select');
+    const monthSelect = document.getElementById('month-select');
+    const socialInput = document.getElementById('social-input');
+    const laborInput = document.getElementById('labor-input');
+
+    function fetchZusDefaults() {
+        // Używamy tego URL-a, który zdefiniowaliśmy w admin.py
+        const url = "{% url 'admin:ksiegowosc_monthlysettlement_get_zus_defaults' %}";
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                socialInput.value = data.social_insurance;
+                laborInput.value = data.labor_fund;
+            })
+            .catch(error => console.error('Error fetching ZUS defaults:', error));
+    }
+
+    // Wywołaj funkcję przy zmianie roku lub miesiąca
+    yearSelect.addEventListener('change', fetchZusDefaults);
+    monthSelect.addEventListener('change', fetchZusDefaults);
+
+    // Wywołaj raz na początku, aby załadować domyślne wartości
+    fetchZusDefaults();
+});
+</script>
 {% endblock %}
