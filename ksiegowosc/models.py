@@ -396,6 +396,8 @@ class CompanyInfo(models.Model):
     tax_id = models.CharField(max_length=20, verbose_name="NIP")
     regon = models.CharField(max_length=20, blank=True, verbose_name="REGON")
     krs = models.CharField(max_length=20, blank=True, verbose_name="KRS")
+    default_social_insurance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Domyślna składka społeczna")
+    default_labor_fund = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Domyślna składka na Fundusz Pracy")
 
     # Typ działalności gospodarczej
     BUSINESS_TYPES = [
@@ -684,6 +686,8 @@ class MonthlySettlement(models.Model):
     health_insurance_paid = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Opłacona składka zdrowotna")
     income_tax_payable = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Należny podatek dochodowy")
     created_at = models.DateTimeField(auto_now_add=True)
+    social_insurance_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Opłacona składka społeczna")
+    labor_fund_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Opłacona składka na Fundusz Pracy")
 
     class Meta:
         verbose_name = "Rozliczenie miesięczne"

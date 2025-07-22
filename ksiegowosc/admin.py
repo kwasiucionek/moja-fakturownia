@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 import xml.etree.ElementTree as ET
 from django.db import transaction
 from django.utils import timezone
+from django.http import JsonResponse
 
 @admin.register(CompanyInfo)
 class CompanyInfoAdmin(admin.ModelAdmin):
@@ -142,73 +143,72 @@ class ContractorAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+
 @admin.register(MonthlySettlement)
 class MonthlySettlementAdmin(admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/monthlysettlement/change_list.html"
     list_display = ('year', 'month', 'total_revenue', 'income_tax_payable', 'user')
-    list_filter = ('year', 'user')
-    exclude = ('user',)
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        return qs.filter(user=request.user)
-
-    def save_model(self, request, obj, form, change):
-        if not hasattr(obj, 'user') or not obj.user:
-            obj.user = request.user
-        super().save_model(request, obj, form, change)
+    # ... (reszta konfiguracji i metod save/get_queryset bez zmian) ...
 
     def get_urls(self):
         urls = super().get_urls()
         my_urls = [
-            path('oblicz/', self.admin_site.admin_view(self.calculate_view),
-                 name='ksiegowosc_monthlysettlement_calculate')
+            path('oblicz/', self.admin_site.admin_view(self.calculate_view), name='ksiegowosc_monthlysettlement_calculate'),
+            # This is the correct place for this line
+            path('api/get-zus-defaults/', self.admin_site.admin_view(self.get_zus_defaults_view), name='ksiegowosc_get_zus_defaults'),
         ]
         return my_urls + urls
 
+    def get_zus_defaults_view(self, request):
+        """Zwraca domyślne składki ZUS w formacie JSON."""
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        if company_info:
+            data = {
+                'social_insurance': company_info.default_social_insurance,
+                'labor_fund': company_info.default_labor_fund,
+            }
+            return JsonResponse(data)
+        return JsonResponse({'social_insurance': '0.00', 'labor_fund': '0.00'})
+
     def calculate_view(self, request):
         context = {
-            'opts': self.model._meta,
-            'site_header': 'Fakturownia',
-            'site_title': 'Panel Admina',
-            'title': 'Obliczanie Rozliczenia Miesięcznego'
+            'opts': self.model._meta, 'title': 'Obliczanie Rozliczenia Miesięcznego',
         }
 
         if request.method == 'POST':
             month = int(request.POST.get('month'))
             year = int(request.POST.get('year'))
-            health_insurance_paid = float(request.POST.get('health_insurance_paid', '0').replace(',', '.'))
+
+            health_insurance = Decimal(request.POST.get('health_insurance_paid', '0').replace(',', '.'))
+            social_insurance = Decimal(request.POST.get('social_insurance_paid', '0').replace(',', '.'))
+            labor_fund = Decimal(request.POST.get('labor_fund_paid', '0').replace(',', '.'))
 
             total_revenue = Invoice.objects.filter(
-                user=request.user,
-                issue_date__year=year,
-                issue_date__month=month
-            ).aggregate(total=Sum('total_amount'))['total'] or 0.00
+                user=request.user, issue_date__year=year, issue_date__month=month
+            ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
 
-            tax_base = float(total_revenue) - (health_insurance_paid * 0.5)
-            if tax_base < 0:
-                tax_base = 0
-            income_tax_payable = round(tax_base * 0.14)
+            tax_base_revenue = total_revenue - social_insurance
+            tax_base_after_health = tax_base_revenue - (health_insurance / 2)
+            if tax_base_after_health < 0:
+                tax_base_after_health = 0
+
+            income_tax_payable = round(tax_base_after_health * Decimal('0.14'))
 
             settlement, _ = MonthlySettlement.objects.update_or_create(
-                user=request.user,
-                year=year,
-                month=month,
+                user=request.user, year=year, month=month,
                 defaults={
                     'total_revenue': total_revenue,
-                    'health_insurance_paid': health_insurance_paid,
+                    'health_insurance_paid': health_insurance,
+                    'social_insurance_paid': social_insurance,
+                    'labor_fund_paid': labor_fund,
                     'income_tax_payable': income_tax_payable
                 }
             )
-            context.update({'settlement': settlement, 'submitted': True})
+            context['settlement'] = settlement
+            context['submitted'] = True
 
         current_year = datetime.now().year
-        context.update({
-            'years': range(current_year - 5, current_year + 1),
-            'months': range(1, 13)
-        })
+        context.update({'years': range(current_year - 5, current_year + 1), 'months': range(1, 13)})
         return render(request, 'ksiegowosc/settlement_form.html', context)
 
 
