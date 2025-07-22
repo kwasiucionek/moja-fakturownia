@@ -1,0 +1,14 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {% if original %}
+        <li>
+            <a href="{% url 'admin:ksiegowosc_yearlysettlement_view' original.pk %}" class="btn btn-info w-100 mb-2">
+                <i class="fas fa-eye"></i>
+                Podgląd rozliczenia
+            </a>
+        </li>
+    {% endif %}
+
+    {{ block.super }}
+{% endblock %}

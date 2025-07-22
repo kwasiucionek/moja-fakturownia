@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from weasyprint import HTML
-from .models import CompanyInfo, Contractor, Invoice, InvoiceItem, MonthlySettlement
+from .models import CompanyInfo, Contractor, Invoice, InvoiceItem, MonthlySettlement, YearlySettlement
 from django.contrib import messages
 from django.db.models import Sum, Min, Max
 from datetime import datetime
@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 from django.db import transaction
 from django.utils import timezone
 from django.http import JsonResponse
+
 
 @admin.register(CompanyInfo)
 class CompanyInfoAdmin(admin.ModelAdmin):
@@ -651,3 +652,185 @@ class InvoiceAdmin(admin.ModelAdmin):
         response = HttpResponse(pdf, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="faktura-{invoice.invoice_number.replace("/", "_")}.pdf"'
         return response
+
+
+@admin.register(YearlySettlement)
+class YearlySettlementAdmin(admin.ModelAdmin):
+    change_list_template = "admin/ksiegowosc/yearlysettlement/change_list.html"
+    list_display = ('year', 'total_yearly_revenue', 'calculated_yearly_tax', 'tax_difference', 'get_settlement_type_display', 'user')
+    list_filter = ('year', 'user')
+    readonly_fields = ('tax_difference', 'calculated_yearly_tax', 'total_yearly_revenue', 'created_at')
+    exclude = ('user',)
+
+    fieldsets = (
+        ('Podstawowe informacje', {
+            'fields': ('year', 'tax_rate_used')
+        }),
+        ('Podsumowanie przychodów', {
+            'fields': ('total_yearly_revenue',),
+            'classes': ('collapse',),
+        }),
+        ('Składki ZUS', {
+            'fields': ('total_social_insurance_paid', 'total_health_insurance_paid', 'total_labor_fund_paid'),
+            'classes': ('collapse',),
+        }),
+        ('Obliczenia podatkowe', {
+            'fields': ('total_monthly_tax_paid', 'calculated_yearly_tax', 'tax_difference'),
+            'classes': ('collapse',),
+        }),
+        ('Dodatkowe', {
+            'fields': ('notes', 'created_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path('oblicz-roczne/', self.admin_site.admin_view(self.calculate_yearly_view), name='ksiegowosc_yearlysettlement_calculate'),
+            path('<int:object_id>/pdf/', self.admin_site.admin_view(self.generate_yearly_pdf_view), name='ksiegowosc_yearlysettlement_pdf'),
+            path('<int:object_id>/podglad/', self.admin_site.admin_view(self.view_yearly_settlement), name='ksiegowosc_yearlysettlement_view'),
+        ]
+        return my_urls + urls
+
+    def calculate_yearly_view(self, request):
+        context = {
+            'opts': self.model._meta, 'title': 'Obliczanie Rozliczenia Rocznego',
+        }
+
+        if request.method == 'POST':
+            year = int(request.POST.get('year'))
+            tax_rate = Decimal(request.POST.get('tax_rate', '14.00'))
+            notes = request.POST.get('notes', '')
+
+            # Pobierz wszystkie rozliczenia miesięczne dla danego roku
+            monthly_settlements = MonthlySettlement.objects.filter(
+                user=request.user, year=year
+            ).order_by('month')
+
+            if not monthly_settlements.exists():
+                messages.error(request, f"Brak rozliczeń miesięcznych za rok {year}. Najpierw utwórz rozliczenia miesięczne.")
+                current_year = datetime.now().year
+                context.update({'years': range(current_year - 5, current_year + 1)})
+                return render(request, 'ksiegowosc/yearly_settlement_form.html', context)
+
+            # Oblicz sumy roczne
+            yearly_totals = monthly_settlements.aggregate(
+                total_revenue=Sum('total_revenue'),
+                total_social=Sum('social_insurance_paid'),
+                total_health=Sum('health_insurance_paid'),
+                total_labor=Sum('labor_fund_paid'),
+                total_monthly_tax=Sum('income_tax_payable')
+            )
+
+            total_yearly_revenue = yearly_totals['total_revenue'] or Decimal('0.00')
+            total_social_insurance = yearly_totals['total_social'] or Decimal('0.00')
+            total_health_insurance = yearly_totals['total_health'] or Decimal('0.00')
+            total_labor_fund = yearly_totals['total_labor'] or Decimal('0.00')
+            total_monthly_tax_paid = yearly_totals['total_monthly_tax'] or Decimal('0.00')
+
+            # Oblicz podatek roczny (podstawa pomniejszona o składki)
+            tax_base = total_yearly_revenue - total_social_insurance
+            tax_base_after_health = tax_base - (total_health_insurance / 2)  # 50% składki zdrowotnej odliczalne
+            if tax_base_after_health < 0:
+                tax_base_after_health = Decimal('0.00')
+
+            calculated_yearly_tax = (tax_base_after_health * tax_rate / 100).quantize(Decimal('0.01'))
+            tax_difference = calculated_yearly_tax - total_monthly_tax_paid
+
+            # Zapisz rozliczenie roczne
+            yearly_settlement, created = YearlySettlement.objects.update_or_create(
+                user=request.user, year=year,
+                defaults={
+                    'total_yearly_revenue': total_yearly_revenue,
+                    'total_social_insurance_paid': total_social_insurance,
+                    'total_health_insurance_paid': total_health_insurance,
+                    'total_labor_fund_paid': total_labor_fund,
+                    'total_monthly_tax_paid': total_monthly_tax_paid,
+                    'calculated_yearly_tax': calculated_yearly_tax,
+                    'tax_difference': tax_difference,
+                    'tax_rate_used': tax_rate,
+                    'notes': notes
+                }
+            )
+
+            context['yearly_settlement'] = yearly_settlement
+            context['monthly_settlements'] = monthly_settlements
+            context['submitted'] = True
+            context['created'] = created
+
+        current_year = datetime.now().year
+        context.update({
+            'years': range(current_year - 5, current_year + 1),
+            'default_tax_rate': '14.00'
+        })
+        return render(request, 'ksiegowosc/yearly_settlement_form.html', context)
+
+    def generate_yearly_pdf_view(self, request, object_id):
+        """Generuje PDF z rozliczeniem rocznym"""
+        queryset = self.get_queryset(request)
+        try:
+            yearly_settlement = queryset.get(pk=object_id)
+        except YearlySettlement.DoesNotExist:
+            messages.error(request, "Rozliczenie roczne nie zostało znalezione lub nie masz do niego uprawnień.")
+            return redirect(request.META.get('HTTP_REFERER', '/admin/'))
+
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        if not company_info:
+            messages.error(request, "Nie można wygenerować PDF. Uzupełnij najpierw dane firmy w panelu.")
+            return redirect(request.META.get('HTTP_REFERER', '/admin/'))
+
+        # Pobierz rozliczenia miesięczne dla tego roku
+        monthly_settlements = MonthlySettlement.objects.filter(
+            user=request.user, year=yearly_settlement.year
+        ).order_by('month')
+
+        html_string = render_to_string('ksiegowosc/yearly_settlement_pdf_template.html', {
+            'yearly_settlement': yearly_settlement,
+            'company_info': company_info,
+            'monthly_settlements': monthly_settlements
+        })
+
+        html = HTML(string=html_string)
+        pdf = html.write_pdf()
+
+        response = HttpResponse(pdf, content_type='application/pdf')
+        filename = f"rozliczenie-roczne-{yearly_settlement.year}_{company_info.company_name.replace(' ', '_')}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    def view_yearly_settlement(self, request, object_id):
+        """Wyświetla pełny podgląd rozliczenia rocznego"""
+        queryset = self.get_queryset(request)
+        try:
+            yearly_settlement = queryset.get(pk=object_id)
+        except YearlySettlement.DoesNotExist:
+            messages.error(request, "Rozliczenie roczne nie zostało znalezione lub nie masz do niego uprawnień.")
+            return redirect('admin:ksiegowosc_yearlysettlement_changelist')
+
+        # Pobierz rozliczenia miesięczne dla tego roku
+        monthly_settlements = MonthlySettlement.objects.filter(
+            user=request.user, year=yearly_settlement.year
+        ).order_by('month')
+
+        context = {
+            'opts': self.model._meta,
+            'title': f'Podgląd rozliczenia rocznego {yearly_settlement.year}',
+            'yearly_settlement': yearly_settlement,
+            'monthly_settlements': monthly_settlements,
+            'submitted': True,  # Żeby pokazać sekcję wyników
+            'view_mode': True,  # Tryb podglądu (bez formularza)
+        }
+
+        return render(request, 'ksiegowosc/yearly_settlement_view.html', context)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, 'user') or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
