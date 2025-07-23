@@ -1,14 +1,17 @@
 {% extends "admin/change_list.html" %}
 
 {% block object-tools-items %}
-
     <li>
-        <a href="oblicz/" class="btn btn-primary">
+        <a href="kalkulator-zus/" class="btn btn-info w-100 mb-2">
+            <i class="fas fa-calculator"></i>
+            Kalkulator składek ZUS
+        </a>
+    </li>
+    <li>
+        <a href="oblicz/" class="btn btn-primary w-100 mb-2">
             <i class="fas fa-calculator"></i>
             Oblicz i zapisz nowy miesiąc
         </a>
     </li>
-
     {{ block.super }}
-
 {% endblock %}

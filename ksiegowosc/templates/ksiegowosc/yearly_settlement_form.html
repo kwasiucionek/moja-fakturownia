@@ -8,7 +8,7 @@
     </h1>
 
     <!-- Informacja o rozliczeniu rocznym -->
-    <div class="mb-4" style="background-color: #f7f9fc; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem;">
+    <div class="mb-4" style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem; border-left: 4px solid #28a745;">
         <h5><i class="fas fa-info-circle"></i> Rozliczenie roczne - ryczałt ewidencjonowany</h5>
         <p class="mb-2">Rozliczenie roczne oblicza końcowy podatek na podstawie wszystkich rozliczeń miesięcznych z danego roku.</p>
         <div class="row">
@@ -45,13 +45,13 @@
                                     Stawka ryczałtu
                                     <small class="text-muted">(%)</small>
                                 </label>
-                                <input type="text" name="tax_rate" id="tax-rate-input" 
-                                       class="form-control" value="{{ default_tax_rate }}" 
+                                <input type="text" name="tax_rate" id="tax-rate-input"
+                                       class="form-control" value="{{ default_tax_rate }}"
                                        placeholder="14.00" required>
                             </div>
                             <div class="col-md-4">
                                 <label for="notes-input" class="form-label">Uwagi (opcjonalnie)</label>
-                                <input type="text" name="notes" id="notes-input" 
+                                <input type="text" name="notes" id="notes-input"
                                        class="form-control" placeholder="np. podstawa prawna">
                             </div>
                             <div class="col-md-2">
@@ -64,7 +64,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
@@ -167,10 +167,10 @@
                                 <strong>Uwagi:</strong> {{ yearly_settlement.notes }}
                             </div>
                         {% endif %}
-                        
+
                         <!-- Przycisk do PDF -->
                         <div class="mt-3 text-center">
-                            <a href="{% url 'admin:ksiegowosc_yearlysettlement_pdf' yearly_settlement.id %}" 
+                            <a href="{% url 'admin:ksiegowosc_yearlysettlement_pdf' yearly_settlement.id %}"
                                class="btn btn-success" target="_blank">
                                 <i class="fas fa-file-pdf"></i> Generuj PDF z rozliczeniem
                             </a>

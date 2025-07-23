@@ -1,0 +1,179 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="container-fluid pt-3">
+    <h1 class="mb-4">
+        <i class="fas fa-calculator"></i> Kalkulator składek ZUS
+    </h1>
+
+    <!-- Informacja o stawkach -->
+    <div class="mb-4" style="background-color: #f7f9fc; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem;">
+        <h5><i class="fas fa-info-circle"></i> Aktualne stawki ZUS {{ current_year }}</h5>
+        {% if zus_rates %}
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-2"><strong>Płaca minimalna:</strong> {{ zus_rates.minimum_wage|floatformat:2 }} PLN</p>
+                    <p class="mb-2"><strong>Minimalna podstawa wymiaru:</strong> {{ zus_rates.minimum_base|floatformat:2 }} PLN</p>
+                    <p class="mb-0"><small class="text-muted">Ostatnia aktualizacja: {{ zus_rates.updated_at|date:"d.m.Y H:i" }}</small></p>
+                </div>
+                <div class="col-md-6">
+                    {% if company_info %}
+                        <p class="mb-2"><strong>Ustawienia firmy:</strong></p>
+                        <ul class="small mb-0">
+                            {% if company_info.preferential_zus %}<li>✓ Preferencyjne składki ZUS</li>{% endif %}
+                            {% if company_info.small_zus_plus %}<li>✓ Małe ZUS Plus</li>{% endif %}
+                            {% if company_info.zus_health_insurance_only %}<li>✓ Tylko składka zdrowotna</li>{% endif %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div class="alert alert-warning mt-3">
+                <strong>Brak aktualnych stawek ZUS!</strong> 
+                <a href="{% url 'admin:ksiegowosc_zusrates_update' %}" class="btn btn-sm btn-outline-warning ms-2">
+                    Aktualizuj stawki
+                </a>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if company_info and zus_rates %}
+        <!-- Obliczone składki -->
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-coins"></i> Składki do zapłaty w miesiącu</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Podstawa wymiaru składek:</strong></td>
+                                    <td class="text-end"><strong>{{ calculated_rates.base|floatformat:2 }} PLN</strong></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2"><hr class="my-2"></td>
+                                </tr>
+                                <tr>
+                                    <td>Składka emerytalno-rentowa ({{ zus_rates.pension_rate|mul:100|floatformat:2 }}% + {{ zus_rates.disability_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td class="text-end">{{ calculated_rates.pension_disability|floatformat:2 }} PLN</td>
+                                </tr>
+                                <tr>
+                                    <td>Składka wypadkowa ({{ zus_rates.accident_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td class="text-end">{{ calculated_rates.accident|floatformat:2 }} PLN</td>
+                                </tr>
+                                <tr class="table-light">
+                                    <td><strong>Razem składki społeczne:</strong></td>
+                                    <td class="text-end"><strong>{{ calculated_rates.social_insurance_total|floatformat:2 }} PLN</strong></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2"><hr class="my-2"></td>
+                                </tr>
+                                <tr>
+                                    <td>Fundusz Pracy ({{ zus_rates.labor_fund_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td class="text-end">{{ calculated_rates.labor_fund|floatformat:2 }} PLN</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2"><hr class="my-2"></td>
+                                </tr>
+                                <tr>
+                                    <td>Składka zdrowotna ({{ zus_rates.health_insurance_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td class="text-end">{{ calculated_rates.health_insurance_total|floatformat:2 }} PLN</td>
+                                </tr>
+                                <tr class="small text-muted">
+                                    <td>&nbsp;&nbsp;&nbsp;w tym odliczalna ({{ zus_rates.health_insurance_deductible_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td class="text-end">{{ calculated_rates.health_insurance_deductible|floatformat:2 }} PLN</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card bg-light">
+                    <div class="card-header">
+                        <h6><i class="fas fa-clipboard-list"></i> Podsumowanie</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <strong class="text-primary">Składki społeczne:</strong><br>
+                            <span class="h5">{{ calculated_rates.social_insurance_total|floatformat:2 }} PLN</span>
+                        </div>
+                        <div class="mb-3">
+                            <strong class="text-info">Fundusz Pracy:</strong><br>
+                            <span class="h5">{{ calculated_rates.labor_fund|floatformat:2 }} PLN</span>
+                        </div>
+                        <div class="mb-3">
+                            <strong class="text-success">Składka zdrowotna:</strong><br>
+                            <span class="h5">{{ calculated_rates.health_insurance_total|floatformat:2 }} PLN</span>
+                        </div>
+                        <hr>
+                        <div>
+                            <strong class="text-dark">Razem do zapłaty:</strong><br>
+                            <span class="h4 text-danger">{{ calculated_rates.social_insurance_total|add:calculated_rates.labor_fund|add:calculated_rates.health_insurance_total|floatformat:2 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Przycisk kopiowania -->
+                <div class="mt-3 text-center">
+                    <button class="btn btn-outline-primary" onclick="copyToSettlement()">
+                        <i class="fas fa-copy"></i> Skopiuj do rozliczenia miesięcznego
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dodatkowe informacje -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6><i class="fas fa-lightbulb"></i> Informacje dodatkowe</h6>
+                <div class="row small">
+                    <div class="col-md-6">
+                        <ul class="mb-0">
+                            <li>Składki społeczne są w pełni odliczalne od przychodu przy ryczałcie</li>
+                            <li>Z składki zdrowotnej odliczalna jest tylko część ({{ zus_rates.health_insurance_deductible_rate|mul:100|floatformat:2 }}%)</li>
+                            <li>Fundusz Pracy nie jest odliczalny od podstawy opodatkowania</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul class="mb-0">
+                            {% if company_info.preferential_zus %}
+                                <li class="text-success">Korzystasz z preferencyjnych składek ZUS</li>
+                            {% endif %}
+                            {% if company_info.small_zus_plus %}
+                                <li class="text-info">Możesz skorzystać z Małego ZUS Plus (limit {{ zus_rates.small_zus_plus_threshold|floatformat:0 }} PLN/rok)</li>
+                            {% endif %}
+                            <li><a href="{{ zus_rates.source_url }}" target="_blank">Sprawdź aktualne stawki na ZUS.pl</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-warning">
+            <h5>Nie można obliczyć składek</h5>
+            <p>Aby skorzystać z kalkulatora składek ZUS, musisz:</p>
+            <ul>
+                <li>Uzupełnić <a href="{% url 'admin:ksiegowosc_companyinfo_changelist' %}">dane firmy</a></li>
+                <li>Pobrać <a href="{% url 'admin:ksiegowosc_zusrates_update' %}">aktualne stawki ZUS</a></li>
+            </ul>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+function copyToSettlement() {
+    // Kopiuj wartości do schowka lub przekieruj do rozliczenia z parametrami
+    const social = {{ calculated_rates.social_insurance_total|default:0 }};
+    const labor = {{ calculated_rates.labor_fund|default:0 }};
+    const health = {{ calculated_rates.health_insurance_total|default:0 }};
+    
+    const url = `/admin/ksiegowosc/monthlysettlement/oblicz/?social=${social}&labor=${labor}&health=${health}`;
+    window.location.href = url;
+}
+</script>
+{% endblock %}
