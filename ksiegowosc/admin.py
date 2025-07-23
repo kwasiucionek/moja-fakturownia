@@ -13,7 +13,11 @@ import xml.etree.ElementTree as ET
 from django.db import transaction
 from django.utils import timezone
 from django.http import JsonResponse
-
+from django.http import JsonResponse
+from django.db.models import Sum, Count, Q
+from django.db.models.functions import TruncMonth
+from datetime import datetime, timedelta
+import json
 
 @admin.register(CompanyInfo)
 class CompanyInfoAdmin(admin.ModelAdmin):
@@ -283,6 +287,141 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
         if not hasattr(obj, 'user') or not obj.user:
             obj.user = request.user
         super().save_model(request, obj, form, change)
+
+    def dashboard_view(self, request):
+        """Główny dashboard z wykresami i statystykami"""
+
+        context = {
+            'opts': self.model._meta,
+            'title': 'Dashboard - Podsumowanie działalności',
+            'current_year': datetime.now().year,
+            'current_month': datetime.now().month,
+        }
+
+        # Dane dla wykresów (ostatnie 12 miesięcy)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365)
+
+        # 1. Wykres przychodów miesięcznych
+        monthly_revenue = Invoice.objects.filter(
+            user=request.user,
+            issue_date__gte=start_date
+        ).annotate(
+            month=TruncMonth('issue_date')
+        ).values('month').annotate(
+            total=Sum('total_amount')
+        ).order_by('month')
+
+        revenue_labels = []
+        revenue_data = []
+        for item in monthly_revenue:
+            revenue_labels.append(item['month'].strftime('%Y-%m'))
+            revenue_data.append(float(item['total'] or 0))
+
+        context['revenue_chart'] = {
+            'labels': json.dumps(revenue_labels),
+            'data': json.dumps(revenue_data)
+        }
+
+        # 2. Wykres składek ZUS (ostatnie 12 miesięcy)
+        zus_settlements = MonthlySettlement.objects.filter(
+            user=request.user,
+            year__gte=start_date.year
+        ).order_by('year', 'month')
+
+        zus_labels = []
+        zus_social_data = []
+        zus_health_data = []
+        zus_labor_data = []
+
+        for settlement in zus_settlements:
+            zus_labels.append(f"{settlement.year}-{settlement.month:02d}")
+            zus_social_data.append(float(settlement.social_insurance_paid))
+            zus_health_data.append(float(settlement.health_insurance_paid))
+            zus_labor_data.append(float(settlement.labor_fund_paid))
+
+        context['zus_chart'] = {
+            'labels': json.dumps(zus_labels),
+            'social_data': json.dumps(zus_social_data),
+            'health_data': json.dumps(zus_health_data),
+            'labor_data': json.dumps(zus_labor_data)
+        }
+
+        # 3. Statystyki bieżącego roku
+        current_year = datetime.now().year
+        year_stats = {
+            'total_revenue': Invoice.objects.filter(
+                user=request.user,
+                issue_date__year=current_year
+            ).aggregate(total=Sum('total_amount'))['total'] or 0,
+
+            'invoices_count': Invoice.objects.filter(
+                user=request.user,
+                issue_date__year=current_year
+            ).count(),
+
+            'corrections_count': Invoice.objects.filter(
+                user=request.user,
+                issue_date__year=current_year,
+                is_correction=True
+            ).count(),
+
+            'contractors_count': Contractor.objects.filter(user=request.user).count(),
+
+            'avg_invoice_value': 0,
+        }
+
+        if year_stats['invoices_count'] > 0:
+            year_stats['avg_invoice_value'] = year_stats['total_revenue'] / year_stats['invoices_count']
+
+        # Składki ZUS w bieżącym roku
+        zus_year_stats = MonthlySettlement.objects.filter(
+            user=request.user,
+            year=current_year
+        ).aggregate(
+            total_social=Sum('social_insurance_paid'),
+            total_health=Sum('health_insurance_paid'),
+            total_labor=Sum('labor_fund_paid'),
+            total_tax=Sum('income_tax_payable')
+        )
+
+        year_stats.update({
+            'total_social_insurance': zus_year_stats['total_social'] or 0,
+            'total_health_insurance': zus_year_stats['total_health'] or 0,
+            'total_labor_fund': zus_year_stats['total_labor'] or 0,
+            'total_tax_paid': zus_year_stats['total_tax'] or 0,
+        })
+
+        context['year_stats'] = year_stats
+
+        # 4. Ostatnie faktury
+        recent_invoices = Invoice.objects.filter(
+            user=request.user
+        ).order_by('-issue_date')[:5]
+        context['recent_invoices'] = recent_invoices
+
+        # 5. Miesięczne rozliczenia do sprawdzenia
+        pending_settlements = []
+        for month in range(1, 13):
+            if not MonthlySettlement.objects.filter(
+                user=request.user, year=current_year, month=month
+            ).exists():
+                if month <= datetime.now().month:  # Tylko przeszłe i bieżący miesiąc
+                    pending_settlements.append(month)
+
+        context['pending_settlements'] = pending_settlements
+
+        return render(request, 'admin/dashboard.html', context)
+
+    # Dodaj URL do get_urls() w MonthlySettlementAdmin
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path('dashboard/', self.admin_site.admin_view(self.dashboard_view), name='ksiegowosc_dashboard'),
+            path('oblicz/', self.admin_site.admin_view(self.calculate_view), name='ksiegowosc_monthlysettlement_calculate'),
+            path('kalkulator-zus/', self.admin_site.admin_view(self.zus_calculator_view), name='ksiegowosc_monthlysettlement_zus_calculator'),
+        ]
+        return my_urls + urls
 
 class InvoiceItemInline(admin.TabularInline):
     model = InvoiceItem
