@@ -202,10 +202,6 @@ moja-fakturownia/
 - Zaktualizuj stawki ZUS w panelu administracyjnym
 - Sprawdź ustawienia firmy (preferencje, Małe ZUS Plus)
 
-## 📝 Licencja
-
-Ten projekt jest udostępniony na licencji MIT. Zobacz plik `LICENSE` dla szczegółów.
-
 ## 🤝 Wkład w projekt
 
 Jeśli chcesz przyczynić się do rozwoju projektu:
