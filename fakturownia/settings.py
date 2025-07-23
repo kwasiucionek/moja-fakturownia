@@ -114,7 +114,7 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Jazzmin settings
+
 JAZZMIN_SETTINGS = {
     # Tytuły
     "site_title": "Fakturownia",
@@ -123,9 +123,10 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "Witaj w panelu Fakturowni",
     "copyright": "Fakturownia App",
 
-    # Górne menu
+    # Górne menu - DODANO DASHBOARD
     "topmenu_links": [
         {"name": "Home", "url": "admin:index"},
+        {"name": "Dashboard", "url": "admin:ksiegowosc_dashboard", "permissions": ["ksiegowosc.view_monthlysettlement"]},
         {"app": "ksiegowosc"},
     ],
 
@@ -151,12 +152,24 @@ JAZZMIN_SETTINGS = {
         "ksiegowosc.contractor": "fas fa-address-book",
         "ksiegowosc.invoice": "fas fa-file-invoice",
         "ksiegowosc.monthlysettlement": "fas fa-calculator",
+        "ksiegowosc.yearlysettlement": "fas fa-calendar-alt",
+        "ksiegowosc.zusrates": "fas fa-coins",
     },
 
     # Ulepszenia interfejsu
     "show_ui_builder": True,
     "changeform_format": "horizontal_tabs",
     "related_modal_active": True,
+
+    # DODANE: Customowy dashboard
+    "custom_links": {
+        "ksiegowosc": [{
+            "name": "Dashboard z wykresami",
+            "url": "admin:ksiegowosc_dashboard",
+            "icon": "fas fa-chart-pie",
+            "permissions": ["ksiegowosc.view_monthlysettlement"]
+        }]
+    },
 
     # CSS/JS
     "custom_css": None,

@@ -1,0 +1,352 @@
+{% extends "admin/base_site.html" %}
+{% load static admin_urls %}
+
+{% block title %}Dashboard - {{ title }}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<!-- Chart.js jest już dostępny w AdminLTE/Jazzmin -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.info-box-text {
+    font-weight: 500;
+}
+.chart-container {
+    height: 400px;
+    margin-bottom: 20px;
+}
+.dashboard-card {
+    margin-bottom: 20px;
+}
+.recent-activity {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.pending-alert {
+    border-left: 4px solid #dc3545;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="content-wrapper" style="margin-left: 0;">
+    <div class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1 class="m-0">
+                        <i class="fas fa-chart-pie"></i> Dashboard - {{ current_year }}
+                    </h1>
+                </div>
+                <div class="col-sm-6">
+                    <ol class="breadcrumb float-sm-right">
+                        <li class="breadcrumb-item"><a href="{% url 'admin:index' %}">Panel główny</a></li>
+                        <li class="breadcrumb-item active">Dashboard</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section class="content">
+        <div class="container-fluid">
+            
+            <!-- Statystyki - Info Boxes -->
+            <div class="row">
+                <div class="col-lg-3 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-info"><i class="fas fa-file-invoice-dollar"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Przychód {{ current_year }}</span>
+                            <span class="info-box-number">{{ year_stats.total_revenue|floatformat:0 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-success"><i class="fas fa-receipt"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Liczba faktur</span>
+                            <span class="info-box-number">{{ year_stats.invoices_count }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-warning"><i class="fas fa-hand-holding-usd"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Średnia wartość faktury</span>
+                            <span class="info-box-number">{{ year_stats.avg_invoice_value|floatformat:0 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-danger"><i class="fas fa-percent"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Podatek zapłacony</span>
+                            <span class="info-box-number">{{ year_stats.total_tax_paid|floatformat:0 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Składki ZUS Info Boxes -->
+            <div class="row">
+                <div class="col-lg-4 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-primary"><i class="fas fa-shield-alt"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Składki społeczne</span>
+                            <span class="info-box-number">{{ year_stats.total_social_insurance|floatformat:0 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-success"><i class="fas fa-heartbeat"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Składki zdrowotne</span>
+                            <span class="info-box-number">{{ year_stats.total_health_insurance|floatformat:0 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-info"><i class="fas fa-briefcase"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Fundusz Pracy</span>
+                            <span class="info-box-number">{{ year_stats.total_labor_fund|floatformat:0 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Wykresy -->
+            <div class="row">
+                <!-- Wykres przychodów -->
+                <div class="col-md-8">
+                    <div class="card dashboard-card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-chart-line"></i> Przychody miesięczne (ostatnie 12 miesięcy)
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="revenueChart" style="height: 350px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ostatnie faktury -->
+                <div class="col-md-4">
+                    <div class="card dashboard-card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-file-invoice"></i> Ostatnie faktury
+                            </h3>
+                        </div>
+                        <div class="card-body recent-activity">
+                            {% for invoice in recent_invoices %}
+                            <div class="d-flex justify-content-between align-items-center mb-3 p-2 border-bottom">
+                                <div>
+                                    <strong>{{ invoice.invoice_number }}</strong><br>
+                                    <small class="text-muted">{{ invoice.contractor.name }}</small><br>
+                                    <small>{{ invoice.issue_date|date:"d.m.Y" }}</small>
+                                </div>
+                                <div class="text-right">
+                                    <strong class="text-success">{{ invoice.total_amount|floatformat:2 }} PLN</strong>
+                                    {% if invoice.is_correction %}
+                                        <br><span class="badge badge-warning">Korekta</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% empty %}
+                            <p class="text-muted">Brak faktur do wyświetlenia</p>
+                            {% endfor %}
+                        </div>
+                        <div class="card-footer">
+                            <a href="{% url 'admin:ksiegowosc_invoice_changelist' %}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-list"></i> Zobacz wszystkie faktury
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Wykres składek ZUS -->
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card dashboard-card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-chart-bar"></i> Składki ZUS miesięczne
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="zusChart" style="height: 350px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Powiadomienia i zadania -->
+                <div class="col-md-4">
+                    <div class="card dashboard-card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-bell"></i> Do zrobienia
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            {% if pending_settlements %}
+                                <div class="alert alert-warning pending-alert">
+                                    <h6><i class="fas fa-exclamation-triangle"></i> Brakujące rozliczenia</h6>
+                                    <p class="mb-2">Nie masz rozliczeń za miesiące:</p>
+                                    <ul class="mb-3">
+                                        {% for month in pending_settlements %}
+                                            <li>{{ month }}/{{ current_year }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    <a href="{% url 'admin:ksiegowosc_monthlysettlement_calculate' %}" 
+                                       class="btn btn-warning btn-sm">
+                                        <i class="fas fa-calculator"></i> Dodaj rozliczenia
+                                    </a>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle"></i> Wszystkie rozliczenia aktualne!
+                                </div>
+                            {% endif %}
+
+                            <div class="mt-3">
+                                <h6>Szybkie akcje:</h6>
+                                <div class="btn-group-vertical d-block">
+                                    <a href="{% url 'admin:ksiegowosc_invoice_add' %}" 
+                                       class="btn btn-success btn-sm mb-2">
+                                        <i class="fas fa-plus"></i> Nowa faktura
+                                    </a>
+                                    <a href="{% url 'admin:ksiegowosc_monthlysettlement_zus_calculator' %}" 
+                                       class="btn btn-info btn-sm mb-2">
+                                        <i class="fas fa-calculator"></i> Kalkulator ZUS
+                                    </a>
+                                    <a href="{% url 'admin:ksiegowosc_yearlysettlement_calculate' %}" 
+                                       class="btn btn-primary btn-sm">
+                                        <i class="fas fa-calendar-alt"></i> Rozliczenie roczne
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Wykres przychodów (liniowy)
+    const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+    const revenueChart = new Chart(revenueCtx, {
+        type: 'line',
+        data: {
+            labels: {{ revenue_chart.labels|safe }},
+            datasets: [{
+                label: 'Przychody (PLN)',
+                data: {{ revenue_chart.data|safe }},
+                borderColor: 'rgb(54, 162, 235)',
+                backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString('pl-PL') + ' PLN';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Wykres składek ZUS (słupkowy)
+    const zusCtx = document.getElementById('zusChart').getContext('2d');
+    const zusChart = new Chart(zusCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ zus_chart.labels|safe }},
+            datasets: [
+                {
+                    label: 'Składki społeczne',
+                    data: {{ zus_chart.social_data|safe }},
+                    backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                    borderColor: 'rgb(54, 162, 235)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Składki zdrowotne',
+                    data: {{ zus_chart.health_data|safe }},
+                    backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                    borderColor: 'rgb(75, 192, 192)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Fundusz Pracy',
+                    data: {{ zus_chart.labor_data|safe }},
+                    backgroundColor: 'rgba(255, 205, 86, 0.8)',
+                    borderColor: 'rgb(255, 205, 86)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            scales: {
+                x: {
+                    stacked: false
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString('pl-PL') + ' PLN';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
