@@ -4,6 +4,11 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
 from datetime import timedelta
+import requests
+from bs4 import BeautifulSoup
+import re
+from decimal import Decimal
+
 
 KODY_URZEDOW_SKARBOWYCH = [
     ('0202', 'Urząd Skarbowy w Bolesławcu'),
@@ -749,3 +754,200 @@ class YearlySettlement(models.Model):
             return f"Dopłata: {self.tax_difference} PLN"
         else:
             return "Rozliczenie bez dopłat i zwrotów"
+
+
+class ZUSRates(models.Model):
+    year = models.IntegerField(verbose_name="Rok", unique=True)
+
+    # Minimalne wynagrodzenie
+    minimum_wage = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Płaca minimalna")
+
+    # Podstawy wymiaru składek
+    minimum_base = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Minimalna podstawa wymiaru")
+
+    # Stawki składek emerytalno-rentowych
+    pension_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.1976, verbose_name="Stawka emerytalno-rentowa (%)")
+    disability_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.015, verbose_name="Stawka rentowa (%)")
+    accident_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.0167, verbose_name="Stawka wypadkowa (%)")
+
+    # Fundusz Pracy
+    labor_fund_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.0245, verbose_name="Stawka Fundusz Pracy (%)")
+
+    # Składka zdrowotna
+    health_insurance_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.09, verbose_name="Stawka zdrowotna (%)")
+    health_insurance_deductible_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.0775, verbose_name="Stawka zdrowotna odliczalna (%)")
+
+    # Preferencyjne składki
+    preferential_pension_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.1976, verbose_name="Preferencja emerytalno-rentowa (%)")
+    preferential_months = models.IntegerField(default=24, verbose_name="Liczba miesięcy preferencji")
+
+    # Małe ZUS Plus - progi
+    small_zus_plus_threshold = models.DecimalField(max_digits=12, decimal_places=2, default=120000, verbose_name="Próg przychodów Małe ZUS Plus")
+
+    # Metadane
+    updated_at = models.DateTimeField(auto_now=True)
+    source_url = models.URLField(blank=True, verbose_name="Źródło danych")
+    is_current = models.BooleanField(default=False, verbose_name="Aktualne stawki")
+
+    class Meta:
+        verbose_name = "Stawki ZUS"
+        verbose_name_plural = "Stawki ZUS"
+        ordering = ['-year']
+
+    def __str__(self):
+        return f"Stawki ZUS {self.year}"
+
+    def save(self, *args, **kwargs):
+        # Oznacz jako aktualne tylko jedne stawki
+        if self.is_current:
+            ZUSRates.objects.filter(is_current=True).update(is_current=False)
+        super().save(*args, **kwargs)
+
+    def calculate_social_insurance(self, company_info, annual_income=None):
+        """Oblicza składki społeczne na podstawie danych firmy"""
+
+        # Podstawa wymiaru - minimum lub 60% płacy minimalnej dla preferencji
+        if company_info.preferential_zus:
+            base = self.minimum_wage * Decimal('0.60')  # 60% płacy minimalnej
+        elif company_info.small_zus_plus and annual_income and annual_income <= self.small_zus_plus_threshold:
+            # Małe ZUS Plus - podstawa zależy od przychodów
+            base = max(
+                self.minimum_base * Decimal('0.30'),  # Min 30% podstawy
+                min(annual_income * Decimal('0.50') / 12, self.minimum_base)  # Max podstawa minimalna
+            )
+        else:
+            base = self.minimum_base
+
+        # Składki społeczne
+        pension_disability = base * (self.pension_rate + self.disability_rate)  # Emerytalno-rentowa
+        accident = base * self.accident_rate  # Wypadkowa
+
+        total_social = pension_disability + accident
+
+        # Fundusz Pracy
+        labor_fund = base * self.labor_fund_rate
+
+        # Składka zdrowotna
+        health_base = base  # Podstawa dla zdrowotnej
+        health_total = health_base * self.health_insurance_rate
+        health_deductible = health_base * self.health_insurance_deductible_rate
+
+        return {
+            'base': base,
+            'social_insurance_total': total_social,
+            'pension_disability': pension_disability,
+            'accident': accident,
+            'labor_fund': labor_fund,
+            'health_insurance_total': health_total,
+            'health_insurance_deductible': health_deductible,
+        }
+
+    @classmethod
+    def get_current_rates(cls):
+        """Pobiera aktualne stawki ZUS"""
+        current_year = timezone.now().year
+        rates, created = cls.objects.get_or_create(
+            year=current_year,
+            defaults={
+                'minimum_wage': Decimal('4300.00'),  # Wartości domyślne
+                'minimum_base': Decimal('4694.40'),
+                'is_current': True,
+                'source_url': 'https://www.zus.pl/baza-wiedzy/skladki-wskazniki-odsetki/skladki/wysokosc-skladek-na-ubezpieczenia-spoleczne'
+            }
+        )
+        return rates
+
+
+def fetch_zus_rates_from_web(year=None):
+    """Pobiera aktualne stawki ZUS ze strony ZUS.pl"""
+    if year is None:
+        year = timezone.now().year
+
+    url = "https://www.zus.pl/baza-wiedzy/skladki-wskazniki-odsetki/skladki/wysokosc-skladek-na-ubezpieczenia-spoleczne"
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Szukaj danych w tabelach lub tekście
+        rates_data = {
+            'year': year,
+            'minimum_wage': None,
+            'minimum_base': None,
+            'source_url': url
+        }
+
+        # Szukaj kwot w złotych (wzorce: 4 300,00 zł, 4300 zł, itp.)
+        text_content = soup.get_text()
+
+        # Wzorce do wyszukiwania kwot
+        wage_patterns = [
+            r'płaca minimalna.*?(\d[\d\s]*[,.]?\d*)\s*zł',
+            r'wynagrodzenie minimalne.*?(\d[\d\s]*[,.]?\d*)\s*zł',
+            r'(\d[\d\s]*[,.]?\d*)\s*zł.*?płaca minimalna',
+        ]
+
+        base_patterns = [
+            r'podstawa wymiaru.*?(\d[\d\s]*[,.]?\d*)\s*zł',
+            r'minimalna podstawa.*?(\d[\d\s]*[,.]?\d*)\s*zł',
+            r'(\d[\d\s]*[,.]?\d*)\s*zł.*?podstawa wymiaru',
+        ]
+
+        # Próbuj wyciągnąć płacę minimalną
+        for pattern in wage_patterns:
+            match = re.search(pattern, text_content, re.IGNORECASE | re.DOTALL)
+            if match:
+                amount_str = match.group(1).replace(' ', '').replace(',', '.')
+                try:
+                    amount = Decimal(amount_str)
+                    if 3000 <= amount <= 10000:  # Realistyczny zakres
+                        rates_data['minimum_wage'] = amount
+                        break
+                except:
+                    continue
+
+        # Próbuj wyciągnąć podstawę wymiaru
+        for pattern in base_patterns:
+            match = re.search(pattern, text_content, re.IGNORECASE | re.DOTALL)
+            if match:
+                amount_str = match.group(1).replace(' ', '').replace(',', '.')
+                try:
+                    amount = Decimal(amount_str)
+                    if 3000 <= amount <= 10000:  # Realistyczny zakres
+                        rates_data['minimum_base'] = amount
+                        break
+                except:
+                    continue
+
+        # Wartości domyślne jeśli nie udało się wyciągnąć
+        if not rates_data['minimum_wage']:
+            rates_data['minimum_wage'] = Decimal('4300.00')  # Aktualna na 2024
+
+        if not rates_data['minimum_base']:
+            rates_data['minimum_base'] = rates_data['minimum_wage'] * Decimal('1.092')  # Typowo ok. 109.2% płacy minimalnej
+
+        return rates_data
+
+    except requests.RequestException as e:
+        print(f"Błąd pobierania danych z ZUS: {e}")
+        # Zwrócić wartości domyślne
+        return {
+            'year': year,
+            'minimum_wage': Decimal('4300.00'),
+            'minimum_base': Decimal('4694.40'),
+            'source_url': url
+        }
+    except Exception as e:
+        print(f"Błąd parsowania danych ZUS: {e}")
+        return {
+            'year': year,
+            'minimum_wage': Decimal('4300.00'),
+            'minimum_base': Decimal('4694.40'),
+            'source_url': url
+        }

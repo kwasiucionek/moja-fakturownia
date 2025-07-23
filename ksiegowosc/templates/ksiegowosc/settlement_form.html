@@ -5,8 +5,81 @@
 <div class="container-fluid pt-3">
     <h1 class="mb-4">Rozliczenie Miesięczne</h1>
 
-    <!-- Informacja o aktualnych stawkach ZUS -->
-    <div class="mb-4" style="background-color: yellowgreen; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem;">
+    <!-- DEBUG SECTION
+    <div class="alert alert-warning mb-4">
+        <h6>🔍 DEBUG INFO:</h6>
+        <p><strong>Dostępne lata:</strong>
+        {% if years %}
+            {% for y in years %}{{ y }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% else %}
+            <span class="text-danger">BRAK LAT!</span>
+        {% endif %}
+        </p>
+        <p><strong>Dostępne miesiące:</strong>
+        {% if months %}
+            {% for m in months %}{{ m }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% else %}
+            <span class="text-danger">BRAK MIESIĘCY!</span>
+        {% endif %}
+        </p>
+    </div>
+ -->
+
+    <!-- Obliczone składki ZUS dla Twojej firmy -->
+    {% if calculated_rates and zus_rates %}
+        <div class="mb-4" style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem; border-left: 4px solid #28a745;">
+            <h5><i class="fas fa-coins"></i> Składki ZUS na {{ zus_rates.year }} dla Twojej firmy</h5>
+            <div class="row">
+                <div class="col-md-8">
+                    <p class="mb-2">
+                        <strong>Podstawa wymiaru składek:</strong> {{ calculated_rates.base|floatformat:2 }} PLN
+                        {% if company_info.preferential_zus %}
+                            <span class="badge bg-info ms-2">Preferencyjne składki</span>
+                        {% endif %}
+                        {% if company_info.small_zus_plus %}
+                            <span class="badge bg-warning ms-2">Małe ZUS Plus</span>
+                        {% endif %}
+                    </p>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <strong>Składki społeczne:</strong><br>
+                            <span class="text-primary h6">{{ calculated_rates.social_insurance_total|floatformat:2 }} PLN</span>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Fundusz Pracy:</strong><br>
+                            <span class="text-info h6">{{ calculated_rates.labor_fund|floatformat:2 }} PLN</span>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Składka zdrowotna:</strong><br>
+                            <span class="text-success h6">{{ calculated_rates.health_insurance_total|floatformat:2 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="fillZusRates()">
+                        <i class="fas fa-copy"></i> Wstaw te kwoty do formularza
+                    </button>
+                    <div class="mt-2 small text-muted">
+                        Obliczone na podstawie<br>aktualnych stawek ZUS {{ zus_rates.year }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% elif company_info %}
+        <div class="mb-4" style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 0.375rem; padding: 1rem; border-left: 4px solid #ffc107;">
+            <h5><i class="fas fa-exclamation-triangle"></i> Brak aktualnych stawek ZUS</h5>
+            <p class="mb-2">Aby obliczyć składki dla Twojej firmy, potrzebujemy aktualnych stawek ZUS.</p>
+            <button type="button" class="btn btn-outline-warning btn-sm" onclick="updateZusRates()">
+                <i class="fas fa-download"></i> Pobierz aktualne stawki ZUS
+            </button>
+        </div>
+    {% else %}
+        <div class="mb-4" style="background-color: #d1ecf1; border: 1px solid #b8daff; border-radius: 0.375rem; padding: 1rem; border-left: 4px solid #17a2b8;">
+            <h5><i class="fas fa-info-circle"></i> Uzupełnij dane firmy</h5>
+            <p class="mb-2">Aby obliczyć składki ZUS, uzupełnij najpierw <a href="{% url 'admin:ksiegowosc_companyinfo_changelist' %}">dane firmy</a>.</p>
+        </div>
+    {% endif %}
+    <div class="mb-4" style="background-color: #f7f9fc; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem;">
         <h5><i class="fas fa-info-circle"></i> Aktualne stawki składek ZUS</h5>
         <p class="mb-2">Aktualne wysokości składek społecznych i na Fundusz Pracy znajdziesz na stronie ZUS:</p>
         <a href="https://www.zus.pl/baza-wiedzy/skladki-wskazniki-odsetki/skladki/wysokosc-skladek-na-ubezpieczenia-spoleczne"
@@ -27,14 +100,21 @@
                 <div class="row align-items-end">
                     <div class="col-md-2">
                         <label for="year-select" class="form-label">Rok</label>
-                        <select name="year" id="year-select" class="form-select">
-                            {% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+                        <select name="year" id="year-select" class="form-select" required>
+                            <option value="">-- Wybierz rok --</option>
+                            {% for y in years %}
+                                <option value="{{ y }}">{{ y }}</option>
+                            {% endfor %}
                         </select>
                     </div>
+
                     <div class="col-md-2">
                         <label for="month-select" class="form-label">Miesiąc</label>
-                        <select name="month" id="month-select" class="form-select">
-                            {% for m in months %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+                        <select name="month" id="month-select" class="form-select" required>
+                            <option value="">-- Wybierz miesiąc --</option>
+                            {% for m in months %}
+                                <option value="{{ m }}">{{ m }}</option>
+                            {% endfor %}
                         </select>
                     </div>
 
@@ -44,23 +124,25 @@
                             <small class="text-muted">(PLN)</small>
                         </label>
                         <input type="text" name="social_insurance_paid" id="social-input"
-                               class="form-control" value="0.00" placeholder="np. 250.00">
+                               class="form-control" value="{{ request.GET.social|default:'0.00' }}" placeholder="np. 250.00">
                     </div>
+
                     <div class="col-md-2">
                         <label for="labor-input" class="form-label">
                             Fundusz Pracy
                             <small class="text-muted">(PLN)</small>
                         </label>
                         <input type="text" name="labor_fund_paid" id="labor-input"
-                               class="form-control" value="0.00" placeholder="np. 25.00">
+                               class="form-control" value="{{ request.GET.labor|default:'0.00' }}" placeholder="np. 25.00">
                     </div>
+
                     <div class="col-md-2">
                         <label for="health-input" class="form-label">
                             Składka Zdrowotna
                             <small class="text-muted">(PLN)</small>
                         </label>
                         <input type="text" name="health_insurance_paid" id="health-input"
-                               class="form-control" value="0.00" placeholder="np. 150.00">
+                               class="form-control" value="{{ request.GET.health|default:'0.00' }}" placeholder="np. 150.00">
                     </div>
 
                     <div class="col-md-2">
@@ -79,16 +161,54 @@
             <div class="row">
                 <div class="col-md-6">
                     <p><strong>Okres:</strong> {{ settlement.month }}/{{ settlement.year }}</p>
-                    <p><strong>Przychód w miesiącu:</strong> {{ settlement.total_revenue }} PLN</p>
-                    <p><strong>Składka społeczna:</strong> {{ settlement.social_insurance_paid }} PLN</p>
-                    <p><strong>Fundusz Pracy:</strong> {{ settlement.labor_fund_paid }} PLN</p>
+                    <p><strong>Przychód w miesiącu:</strong> {{ settlement.total_revenue|floatformat:2 }} PLN</p>
+                    <p><strong>Składka społeczna:</strong> {{ settlement.social_insurance_paid|floatformat:2 }} PLN</p>
+                    <p><strong>Fundusz Pracy:</strong> {{ settlement.labor_fund_paid|floatformat:2 }} PLN</p>
                 </div>
                 <div class="col-md-6">
-                    <p><strong>Składka zdrowotna:</strong> {{ settlement.health_insurance_paid }} PLN</p>
-                    <p class="text-success"><strong>Podatek do zapłaty:</strong> {{ settlement.income_tax_payable }} PLN</p>
+                    <p><strong>Składka zdrowotna:</strong> {{ settlement.health_insurance_paid|floatformat:2 }} PLN</p>
+                    <p class="text-success"><strong>Podatek do zapłaty:</strong> {{ settlement.income_tax_payable|floatformat:2 }} PLN</p>
                 </div>
             </div>
         </div>
     {% endif %}
 </div>
+
+<script>
+function fillZusRates() {
+    // Wypełnij pola formularza obliczonymi składkami ZUS
+    {% if calculated_rates %}
+        document.getElementById('social-input').value = '{{ calculated_rates.social_insurance_total|floatformat:2 }}';
+        document.getElementById('labor-input').value = '{{ calculated_rates.labor_fund|floatformat:2 }}';
+        document.getElementById('health-input').value = '{{ calculated_rates.health_insurance_total|floatformat:2 }}';
+
+        // Pokazuj komunikat o powodzeniu
+        showMessage('✓ Składki ZUS zostały wstawione do formularza', 'success');
+    {% endif %}
+}
+
+function updateZusRates() {
+    // Przekieruj do aktualizacji stawek ZUS (jeśli admin ma taką funkcję)
+    window.open('/admin/ksiegowosc/zusrates/', '_blank');
+}
+
+function showMessage(text, type) {
+    // Prosta funkcja do pokazywania komunikatów
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${text}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Wstaw komunikat na górę strony
+    const container = document.querySelector('.container-fluid');
+    container.insertBefore(alertDiv, container.firstChild);
+
+    // Usuń komunikat po 3 sekundach
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 3000);
+}
+</script>
 {% endblock %}

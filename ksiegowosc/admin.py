@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from weasyprint import HTML
-from .models import CompanyInfo, Contractor, Invoice, InvoiceItem, MonthlySettlement, YearlySettlement
+from .models import CompanyInfo, Contractor, Invoice, InvoiceItem, MonthlySettlement, YearlySettlement, ZUSRates
 from django.contrib import messages
 from django.db.models import Sum, Min, Max
 from datetime import datetime
@@ -154,49 +154,124 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         my_urls = [
             path('oblicz/', self.admin_site.admin_view(self.calculate_view), name='ksiegowosc_monthlysettlement_calculate'),
+            path('kalkulator-zus/', self.admin_site.admin_view(self.zus_calculator_view), name='ksiegowosc_monthlysettlement_zus_calculator'),
         ]
         return my_urls + urls
 
     def calculate_view(self, request):
+        """Widok do obliczania rozliczenia miesięcznego"""
+
+        # Przygotuj podstawowy context
         context = {
-            'opts': self.model._meta, 'title': 'Obliczanie Rozliczenia Miesięcznego',
+            'opts': self.model._meta,
+            'title': 'Obliczanie Rozliczenia Miesięcznego',
         }
 
-        if request.method == 'POST':
-            month = int(request.POST.get('month'))
-            year = int(request.POST.get('year'))
-
-            health_insurance = Decimal(request.POST.get('health_insurance_paid', '0').replace(',', '.'))
-            social_insurance = Decimal(request.POST.get('social_insurance_paid', '0').replace(',', '.'))
-            labor_fund = Decimal(request.POST.get('labor_fund_paid', '0').replace(',', '.'))
-
-            total_revenue = Invoice.objects.filter(
-                user=request.user, issue_date__year=year, issue_date__month=month
-            ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
-
-            tax_base_revenue = total_revenue - social_insurance
-            tax_base_after_health = tax_base_revenue - (health_insurance / 2)
-            if tax_base_after_health < 0:
-                tax_base_after_health = 0
-
-            income_tax_payable = round(tax_base_after_health * Decimal('0.14'))
-
-            settlement, _ = MonthlySettlement.objects.update_or_create(
-                user=request.user, year=year, month=month,
-                defaults={
-                    'total_revenue': total_revenue,
-                    'health_insurance_paid': health_insurance,
-                    'social_insurance_paid': social_insurance,
-                    'labor_fund_paid': labor_fund,
-                    'income_tax_payable': income_tax_payable
-                }
-            )
-            context['settlement'] = settlement
-            context['submitted'] = True
-
+        # ZAWSZE dodaj lata i miesiące do kontekstu
         current_year = datetime.now().year
-        context.update({'years': range(current_year - 5, current_year + 1), 'months': range(1, 13)})
+        context['years'] = list(range(current_year - 5, current_year + 1))
+        context['months'] = list(range(1, 13))
+
+        # Dodaj obliczone składki ZUS dla firmy
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        context['company_info'] = company_info
+
+        if company_info:
+            try:
+                from .models import ZUSRates
+                zus_rates = ZUSRates.get_current_rates()
+                if zus_rates:
+                    # Oblicz składki na podstawie danych firmy
+                    calculated_rates = zus_rates.calculate_social_insurance(company_info)
+                    context['calculated_rates'] = calculated_rates
+                    context['zus_rates'] = zus_rates
+            except (ImportError, Exception) as e:
+                context['zus_rates'] = None
+                context['calculated_rates'] = None
+
+        # Obsługa POST (obliczanie)
+        if request.method == 'POST':
+            try:
+                month = int(request.POST.get('month'))
+                year = int(request.POST.get('year'))
+
+                health_insurance = Decimal(request.POST.get('health_insurance_paid', '0').replace(',', '.'))
+                social_insurance = Decimal(request.POST.get('social_insurance_paid', '0').replace(',', '.'))
+                labor_fund = Decimal(request.POST.get('labor_fund_paid', '0').replace(',', '.'))
+
+                # Pobierz przychody z faktur dla danego miesiąca
+                total_revenue = Invoice.objects.filter(
+                    user=request.user,
+                    issue_date__year=year,
+                    issue_date__month=month
+                ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
+
+                # Oblicz podatek
+                tax_base_revenue = total_revenue - social_insurance
+                tax_base_after_health = tax_base_revenue - (health_insurance / 2)
+                if tax_base_after_health < 0:
+                    tax_base_after_health = Decimal('0.00')
+
+                income_tax_payable = round(tax_base_after_health * Decimal('0.14'))
+
+                # Zapisz rozliczenie
+                settlement, created = MonthlySettlement.objects.update_or_create(
+                    user=request.user, year=year, month=month,
+                    defaults={
+                        'total_revenue': total_revenue,
+                        'health_insurance_paid': health_insurance,
+                        'social_insurance_paid': social_insurance,
+                        'labor_fund_paid': labor_fund,
+                        'income_tax_payable': income_tax_payable
+                    }
+                )
+
+                context['settlement'] = settlement
+                context['submitted'] = True
+
+            except Exception as e:
+                messages.error(request, f"Błąd podczas obliczania: {e}")
+
         return render(request, 'ksiegowosc/settlement_form.html', context)
+
+    def zus_calculator_view(self, request):
+        """Widok kalkulatora składek ZUS"""
+        from django.utils import timezone
+
+        context = {
+            'opts': self.model._meta,
+            'title': 'Kalkulator składek ZUS',
+            'current_year': timezone.now().year
+        }
+
+        # Pobierz dane firmy
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        context['company_info'] = company_info
+
+        # Pobierz aktualne stawki ZUS
+        try:
+            from .models import ZUSRates
+            zus_rates = ZUSRates.get_current_rates()
+            context['zus_rates'] = zus_rates
+        except ImportError:
+            # Jeśli model ZUSRates nie istnieje, pomiń
+            zus_rates = None
+            context['zus_rates'] = None
+
+        # Oblicz składki jeśli mamy wszystkie dane
+        if company_info and zus_rates:
+            # Możesz dodać roczny przychód z GET parametrów
+            annual_income = request.GET.get('annual_income')
+            if annual_income:
+                try:
+                    annual_income = Decimal(annual_income)
+                except:
+                    annual_income = None
+
+            calculated_rates = zus_rates.calculate_social_insurance(company_info, annual_income)
+            context['calculated_rates'] = calculated_rates
+
+        return render(request, 'ksiegowosc/zus_calculator.html', context)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -834,3 +909,53 @@ class YearlySettlementAdmin(admin.ModelAdmin):
         if not hasattr(obj, 'user') or not obj.user:
             obj.user = request.user
         super().save_model(request, obj, form, change)
+
+@admin.register(ZUSRates)
+class ZUSRatesAdmin(admin.ModelAdmin):
+    list_display = ('year', 'minimum_wage', 'minimum_base', 'is_current', 'updated_at')
+    list_filter = ('year', 'is_current')
+    readonly_fields = ('updated_at',)
+
+    fieldsets = (
+        ('Podstawowe informacje', {
+            'fields': ('year', 'is_current', 'source_url', 'updated_at')
+        }),
+        ('Podstawy wymiaru', {
+            'fields': ('minimum_wage', 'minimum_base')
+        }),
+        ('Stawki składek społecznych', {
+            'fields': ('pension_rate', 'disability_rate', 'accident_rate')
+        }),
+        ('Inne składki', {
+            'fields': ('labor_fund_rate', 'health_insurance_rate', 'health_insurance_deductible_rate')
+        }),
+        ('Preferencje i ulgi', {
+            'fields': ('preferential_pension_rate', 'preferential_months', 'small_zus_plus_threshold'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path('aktualizuj-stawki/', self.admin_site.admin_view(self.update_rates_view), name='ksiegowosc_zusrates_update'),
+        ]
+        return my_urls + urls
+
+    def update_rates_view(self, request):
+        """Widok do ręcznej aktualizacji stawek ZUS"""
+        from django.core.management import call_command
+        from io import StringIO
+
+        if request.method == 'POST':
+            try:
+                # Wywołaj command aktualizacji
+                out = StringIO()
+                call_command('update_zus_rates', '--force', stdout=out)
+                output = out.getvalue()
+
+                messages.success(request, f"Stawki ZUS zostały zaktualizowane!\n{output}")
+            except Exception as e:
+                messages.error(request, f"Błąd aktualizacji: {str(e)}")
+
+        return redirect('admin:ksiegowosc_zusrates_changelist')
