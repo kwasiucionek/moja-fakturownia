@@ -5,26 +5,6 @@
 <div class="container-fluid pt-3">
     <h1 class="mb-4">Rozliczenie Miesięczne</h1>
 
-    <!-- DEBUG SECTION
-    <div class="alert alert-warning mb-4">
-        <h6>🔍 DEBUG INFO:</h6>
-        <p><strong>Dostępne lata:</strong>
-        {% if years %}
-            {% for y in years %}{{ y }}{% if not forloop.last %}, {% endif %}{% endfor %}
-        {% else %}
-            <span class="text-danger">BRAK LAT!</span>
-        {% endif %}
-        </p>
-        <p><strong>Dostępne miesiące:</strong>
-        {% if months %}
-            {% for m in months %}{{ m }}{% if not forloop.last %}, {% endif %}{% endfor %}
-        {% else %}
-            <span class="text-danger">BRAK MIESIĘCY!</span>
-        {% endif %}
-        </p>
-    </div>
- -->
-
     <!-- Obliczone składki ZUS dla Twojej firmy -->
     {% if calculated_rates and zus_rates %}
         <div class="mb-4" style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem; border-left: 4px solid #28a745;">
@@ -79,6 +59,7 @@
             <p class="mb-2">Aby obliczyć składki ZUS, uzupełnij najpierw <a href="{% url 'admin:ksiegowosc_companyinfo_changelist' %}">dane firmy</a>.</p>
         </div>
     {% endif %}
+    
     <div class="mb-4" style="background-color: #f7f9fc; border: 1px solid #e9ecef; border-radius: 0.375rem; padding: 1rem;">
         <h5><i class="fas fa-info-circle"></i> Aktualne stawki składek ZUS</h5>
         <p class="mb-2">Aktualne wysokości składek społecznych i na Fundusz Pracy znajdziesz na stronie ZUS:</p>
@@ -146,9 +127,11 @@
                     </div>
 
                     <div class="col-md-2">
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="fas fa-calculator"></i> Oblicz
-                        </button>
+                        <div class="d-grid gap-2" style="margin-top: 1.9rem;">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-calculator"></i> Oblicz
+                            </button>
+                        </div>
                     </div>
                 </div>
             </form>

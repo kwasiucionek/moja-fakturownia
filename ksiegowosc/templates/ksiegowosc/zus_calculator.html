@@ -20,7 +20,7 @@
                 <div class="col-md-6">
                     {% if company_info %}
                         <p class="mb-2"><strong>Ustawienia firmy:</strong></p>
-                        <ul class="small mb-0">
+                        <ul class="small mb-0" style="list-style: none; padding-left: 0;">
                             {% if company_info.preferential_zus %}<li>✓ Preferencyjne składki ZUS</li>{% endif %}
                             {% if company_info.small_zus_plus %}<li>✓ Małe ZUS Plus</li>{% endif %}
                             {% if company_info.zus_health_insurance_only %}<li>✓ Tylko składka zdrowotna</li>{% endif %}
@@ -57,11 +57,11 @@
                                     <td colspan="2"><hr class="my-2"></td>
                                 </tr>
                                 <tr>
-                                    <td>Składka emerytalno-rentowa ({{ zus_rates.pension_rate|mul:100|floatformat:2 }}% + {{ zus_rates.disability_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td>Składka emerytalno-rentowa ({{ zus_rates_percentages.pension_rate_percent|floatformat:2 }}% + {{ zus_rates_percentages.disability_rate_percent|floatformat:2 }}%):</td>
                                     <td class="text-end">{{ calculated_rates.pension_disability|floatformat:2 }} PLN</td>
                                 </tr>
                                 <tr>
-                                    <td>Składka wypadkowa ({{ zus_rates.accident_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td>Składka wypadkowa ({{ zus_rates_percentages.accident_rate_percent|floatformat:2 }}%):</td>
                                     <td class="text-end">{{ calculated_rates.accident|floatformat:2 }} PLN</td>
                                 </tr>
                                 <tr class="table-light">
@@ -72,18 +72,18 @@
                                     <td colspan="2"><hr class="my-2"></td>
                                 </tr>
                                 <tr>
-                                    <td>Fundusz Pracy ({{ zus_rates.labor_fund_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td>Fundusz Pracy ({{ zus_rates_percentages.labor_fund_rate_percent|floatformat:2 }}%):</td>
                                     <td class="text-end">{{ calculated_rates.labor_fund|floatformat:2 }} PLN</td>
                                 </tr>
                                 <tr>
                                     <td colspan="2"><hr class="my-2"></td>
                                 </tr>
                                 <tr>
-                                    <td>Składka zdrowotna ({{ zus_rates.health_insurance_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td>Składka zdrowotna ({{ zus_rates_percentages.health_insurance_rate_percent|floatformat:2 }}%):</td>
                                     <td class="text-end">{{ calculated_rates.health_insurance_total|floatformat:2 }} PLN</td>
                                 </tr>
                                 <tr class="small text-muted">
-                                    <td>&nbsp;&nbsp;&nbsp;w tym odliczalna ({{ zus_rates.health_insurance_deductible_rate|mul:100|floatformat:2 }}%):</td>
+                                    <td>&nbsp;&nbsp;&nbsp;w tym odliczalna ({{ zus_rates_percentages.health_insurance_deductible_rate_percent|floatformat:2 }}%):</td>
                                     <td class="text-end">{{ calculated_rates.health_insurance_deductible|floatformat:2 }} PLN</td>
                                 </tr>
                             </tbody>
@@ -133,14 +133,14 @@
                 <h6><i class="fas fa-lightbulb"></i> Informacje dodatkowe</h6>
                 <div class="row small">
                     <div class="col-md-6">
-                        <ul class="mb-0">
+                        <ul class="mb-0" style="list-style: none; padding-left: 0;">
                             <li>Składki społeczne są w pełni odliczalne od przychodu przy ryczałcie</li>
-                            <li>Z składki zdrowotnej odliczalna jest tylko część ({{ zus_rates.health_insurance_deductible_rate|mul:100|floatformat:2 }}%)</li>
+                            <li>Z składki zdrowotnej odliczalna jest tylko część ({{ zus_rates_percentages.health_insurance_deductible_rate_percent|floatformat:2 }}%)</li>
                             <li>Fundusz Pracy nie jest odliczalny od podstawy opodatkowania</li>
                         </ul>
                     </div>
                     <div class="col-md-6">
-                        <ul class="mb-0">
+                        <ul class="mb-0" style="list-style: none; padding-left: 0;">
                             {% if company_info.preferential_zus %}
                                 <li class="text-success">Korzystasz z preferencyjnych składek ZUS</li>
                             {% endif %}
@@ -157,10 +157,10 @@
         <div class="alert alert-warning">
             <h5>Nie można obliczyć składek</h5>
             <p>Aby skorzystać z kalkulatora składek ZUS, musisz:</p>
-            <ul>
-                <li>Uzupełnić <a href="{% url 'admin:ksiegowosc_companyinfo_changelist' %}">dane firmy</a></li>
-                <li>Pobrać <a href="{% url 'admin:ksiegowosc_zusrates_update' %}">aktualne stawki ZUS</a></li>
-            </ul>
+            <div style="padding-left: 0;">
+                <p>Uzupełnić <a href="{% url 'admin:ksiegowosc_companyinfo_changelist' %}">dane firmy</a></p>
+                <p>Pobrać <a href="{% url 'admin:ksiegowosc_zusrates_update' %}">aktualne stawki ZUS</a></p>
+            </div>
         </div>
     {% endif %}
 </div>
