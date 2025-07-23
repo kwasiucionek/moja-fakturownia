@@ -1,6 +1,6 @@
 # 📊 Moja Fakturownia
 
-Kompleksowy system księgowy dla jednoosobowych działalności gospodarczych prowadzących ryczałt ewidencjonowany. Aplikacja Django z panelem administracyjnym umożliwiającym zarządzanie fakturami, kontrahentami oraz automatyczne rozliczenia podatkowe i składki ZUS.
+Kompleksowy system księgowy dla jednoosobowych działalności gospodarczych. Aplikacja Django z panelem administracyjnym umożliwiającym zarządzanie fakturami, kontrahentami oraz automatyczne rozliczenia podatkowe i składki ZUS.
 
 ## ✨ Funkcjonalności
 
