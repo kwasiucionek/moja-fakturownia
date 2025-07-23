@@ -247,3 +247,28 @@ W przypadku pytań lub problemów:
 - [ ] Dashboard z wykresami i statystykami
 - [ ] Eksport do programów księgowych
 - [ ] Aplikacja mobilna
+
+Jasne, oczywiście. Zaktualizowałem sekcję Licencja w Twoim pliku README.md, aby odzwierciedlała wybraną przez Ciebie licencję CC BY-NC-SA 4.0.
+
+Poniżej znajduje się gotowy fragment, który możesz wkleić do swojego pliku, zastępując obecną sekcję o licencji MIT.
+
+📝 Licencja
+
+Ten projekt jest udostępniony na licencji Creative Commons Uznanie autorstwa-Użycie niekomercyjne-Na tych samych warunkach 4.0 Międzynarodowe (CC BY-NC-SA 4.0).
+
+Oznacza to, że możesz swobodnie:
+
+    Kopiować i rozpowszechniać oprogramowanie w dowolnym medium i formacie.
+
+    Adaptować, remiksować i tworzyć na podstawie tego oprogramowania.
+
+Pod następującymi warunkami:
+
+    Uznanie autorstwa (BY) — Musisz odpowiednio oznaczyć autorstwo, podać link do licencji i wskazać, czy dokonano zmian.
+
+    Użycie niekomercyjne (NC) — Nie możesz używać tego oprogramowania do celów komercyjnych.
+
+    Na tych samych warunkach (SA) — Jeśli remiksujesz, zmieniasz lub tworzysz na podstawie materiału, musisz rozpowszechniać swoje dzieła na tej samej licencji, co oryginał.
+
+Pełną treść licencji znajdziesz w pliku LICENSE w tym repozytorium oraz pod adresem:
+http://creativecommons.org/licenses/by-nc-sa/4.0/
