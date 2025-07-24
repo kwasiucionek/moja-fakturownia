@@ -1,0 +1,309 @@
+{% extends "admin/base_site.html" %}
+{% load static admin_urls %}
+
+{% block title %}Przeterminowane faktury zakupu{% endblock %}
+
+{% block content %}
+<div class="container-fluid pt-3">
+    <h1 class="mb-4">
+        <i class="fas fa-exclamation-triangle text-danger"></i> Przeterminowane faktury zakupu
+    </h1>
+
+    <!-- Podsumowanie -->
+    <div class="row mb-4">
+        <div class="col-12">
+            {% if total_overdue > 0 %}
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-circle"></i> Uwaga! Masz {{ total_overdue }} przeterminowanych faktur do zapłaty</h5>
+                    <p class="mb-0">Faktury pogrupowane według czasu przeterminowania:</p>
+                </div>
+            {% else %}
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle"></i> Świetnie! Nie masz przeterminowanych faktur</h5>
+                    <p class="mb-0">Wszystkie faktury zakupu są opłacone na czas.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if total_overdue > 0 %}
+    <!-- Grupy przeterminowanych faktur -->
+    <div class="row">
+        <!-- 1-30 dni -->
+        <div class="col-md-6 mb-4">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar"></i> 1-30 dni przeterminowane
+                        <span class="badge bg-dark ms-2">{{ overdue_groups.1-30|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if overdue_groups.1-30 %}
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Faktura</th>
+                                        <th>Dostawca</th>
+                                        <th>Termin</th>
+                                        <th class="text-end">Kwota</th>
+                                        <th>Dni</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for invoice in overdue_groups.1-30 %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'admin:ksiegowosc_purchaseinvoice_change' invoice.pk %}">
+                                                {{ invoice.invoice_number }}
+                                            </a>
+                                        </td>
+                                        <td>{{ invoice.supplier.name|truncatechars:20 }}</td>
+                                        <td>{{ invoice.payment_due_date|date:"d.m.Y" }}</td>
+                                        <td class="text-end">{{ invoice.total_amount|floatformat:2 }} PLN</td>
+                                        <td>
+                                            <span class="badge bg-warning">+{{ invoice.days_overdue }}</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="p-3 text-muted text-center">Brak faktur w tym okresie</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 31-60 dni -->
+        <div class="col-md-6 mb-4">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-times"></i> 31-60 dni przeterminowane
+                        <span class="badge bg-dark ms-2">{{ overdue_groups.31-60|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if overdue_groups.31-60 %}
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Faktura</th>
+                                        <th>Dostawca</th>
+                                        <th>Termin</th>
+                                        <th class="text-end">Kwota</th>
+                                        <th>Dni</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for invoice in overdue_groups.31-60 %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'admin:ksiegowosc_purchaseinvoice_change' invoice.pk %}">
+                                                {{ invoice.invoice_number }}
+                                            </a>
+                                        </td>
+                                        <td>{{ invoice.supplier.name|truncatechars:20 }}</td>
+                                        <td>{{ invoice.payment_due_date|date:"d.m.Y" }}</td>
+                                        <td class="text-end">{{ invoice.total_amount|floatformat:2 }} PLN</td>
+                                        <td>
+                                            <span class="badge bg-warning">+{{ invoice.days_overdue }}</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="p-3 text-muted text-center">Brak faktur w tym okresie</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 61-90 dni -->
+        <div class="col-md-6 mb-4">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-circle"></i> 61-90 dni przeterminowane
+                        <span class="badge bg-dark ms-2">{{ overdue_groups.61-90|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if overdue_groups.61-90 %}
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Faktura</th>
+                                        <th>Dostawca</th>
+                                        <th>Termin</th>
+                                        <th class="text-end">Kwota</th>
+                                        <th>Dni</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for invoice in overdue_groups.61-90 %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'admin:ksiegowosc_purchaseinvoice_change' invoice.pk %}">
+                                                {{ invoice.invoice_number }}
+                                            </a>
+                                        </td>
+                                        <td>{{ invoice.supplier.name|truncatechars:20 }}</td>
+                                        <td>{{ invoice.payment_due_date|date:"d.m.Y" }}</td>
+                                        <td class="text-end">{{ invoice.total_amount|floatformat:2 }} PLN</td>
+                                        <td>
+                                            <span class="badge bg-danger">+{{ invoice.days_overdue }}</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="p-3 text-muted text-center">Brak faktur w tym okresie</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 90+ dni -->
+        <div class="col-md-6 mb-4">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-times-circle"></i> Ponad 90 dni przeterminowane
+                        <span class="badge bg-dark ms-2">{{ overdue_groups.90+|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if overdue_groups.90+ %}
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Faktura</th>
+                                        <th>Dostawca</th>
+                                        <th>Termin</th>
+                                        <th class="text-end">Kwota</th>
+                                        <th>Dni</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for invoice in overdue_groups.90+ %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'admin:ksiegowosc_purchaseinvoice_change' invoice.pk %}">
+                                                {{ invoice.invoice_number }}
+                                            </a>
+                                        </td>
+                                        <td>{{ invoice.supplier.name|truncatechars:20 }}</td>
+                                        <td>{{ invoice.payment_due_date|date:"d.m.Y" }}</td>
+                                        <td class="text-end">{{ invoice.total_amount|floatformat:2 }} PLN</td>
+                                        <td>
+                                            <span class="badge bg-danger">+{{ invoice.days_overdue }}</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="p-3 text-muted text-center">Brak faktur w tym okresie</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Podsumowanie kwot -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fas fa-calculator"></i> Podsumowanie zadłużenia</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <h6>1-30 dni:</h6>
+                    <h4 class="text-warning">
+                        {% with total=0 %}
+                            {% for inv in overdue_groups.1-30 %}
+                                {% with total=total|add:inv.total_amount %}{% endwith %}
+                            {% endfor %}
+                            {{ total|floatformat:2 }} PLN
+                        {% endwith %}
+                    </h4>
+                </div>
+                <div class="col-md-3">
+                    <h6>31-60 dni:</h6>
+                    <h4 class="text-warning">
+                        {% with total=0 %}
+                            {% for inv in overdue_groups.31-60 %}
+                                {% with total=total|add:inv.total_amount %}{% endwith %}
+                            {% endfor %}
+                            {{ total|floatformat:2 }} PLN
+                        {% endwith %}
+                    </h4>
+                </div>
+                <div class="col-md-3">
+                    <h6>61-90 dni:</h6>
+                    <h4 class="text-danger">
+                        {% with total=0 %}
+                            {% for inv in overdue_groups.61-90 %}
+                                {% with total=total|add:inv.total_amount %}{% endwith %}
+                            {% endfor %}
+                            {{ total|floatformat:2 }} PLN
+                        {% endwith %}
+                    </h4>
+                </div>
+                <div class="col-md-3">
+                    <h6>90+ dni:</h6>
+                    <h4 class="text-danger">
+                        {% with total=0 %}
+                            {% for inv in overdue_groups.90+ %}
+                                {% with total=total|add:inv.total_amount %}{% endwith %}
+                            {% endfor %}
+                            {{ total|floatformat:2 }} PLN
+                        {% endwith %}
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Akcje -->
+    <div class="text-center">
+        <a href="{% url 'admin:ksiegowosc_purchaseinvoice_changelist' %}" class="btn btn-secondary me-3">
+            <i class="fas fa-arrow-left"></i> Powrót do listy
+        </a>
+        <a href="{% url 'admin:ksiegowosc_purchaseinvoice_changelist' %}?payment_status=pending" 
+           class="btn btn-warning me-3">
+            <i class="fas fa-filter"></i> Filtruj nieopłacone
+        </a>
+        <a href="{% url 'admin:ksiegowosc_purchaseinvoice_expenses_report' %}" 
+           class="btn btn-info">
+            <i class="fas fa-chart-bar"></i> Raport kosztów
+        </a>
+    </div>
+</div>
+
+<style>
+.badge { padding: 4px 8px; font-size: 11px; border-radius: 4px; color: white; }
+.bg-dark { background-color: #343a40; }
+.bg-warning { background-color: #ffc107; color: #212529; }
+.bg-danger { background-color: #dc3545; }
+.border-warning { border-color: #ffc107 !important; }
+.border-danger { border-color: #dc3545 !important; }
+.text-warning { color: #ffc107; }
+.text-danger { color: #dc3545; }
+.ms-2 { margin-left: 0.5rem; }
+.me-3 { margin-right: 1rem; }
+</style>
+{% endblock %}

@@ -34,20 +34,20 @@ class PaymentStatusFilter(admin.SimpleListFilter):
 
     def queryset(self, request, queryset):
         today = timezone.now().date()
-        
+
         if self.value() == 'paid':
             # Faktury w pełni opłacone
             return queryset.filter(
                 payments__amount__gte=F('total_amount')
             ).distinct()
-            
+
         elif self.value() == 'partial':
             # Faktury częściowo opłacone
             return queryset.filter(
                 payments__amount__gt=0,
                 payments__amount__lt=F('total_amount')
             ).distinct()
-            
+
         elif self.value() == 'overdue':
             # Faktury przeterminowane (termin minął i nie są w pełni opłacone)
             return queryset.filter(
@@ -55,13 +55,13 @@ class PaymentStatusFilter(admin.SimpleListFilter):
             ).exclude(
                 payments__amount__gte=F('total_amount')
             ).distinct()
-            
+
         elif self.value() == 'unpaid':
             # Faktury nieopłacone (brak płatności)
             return queryset.exclude(
                 payments__amount__gt=0
             ).distinct()
-            
+
         return queryset
 
 
@@ -207,7 +207,7 @@ class PaymentAdmin(admin.ModelAdmin):
     search_fields = ('invoice__invoice_number', 'invoice__contractor__name', 'bank_reference')
     exclude = ('user',)
     autocomplete_fields = ['invoice']
-    
+
     fieldsets = (
         ('Podstawowe informacje', {
             'fields': ('invoice', 'amount', 'payment_date', 'payment_method')
@@ -312,7 +312,7 @@ class InvoiceAdmin(admin.ModelAdmin):
         status = obj.payment_status
         colors = {
             'paid': 'green',
-            'partial': 'orange', 
+            'partial': 'orange',
             'overdue': 'red',
             'unpaid': 'gray',
         }
@@ -370,11 +370,11 @@ class InvoiceAdmin(admin.ModelAdmin):
             path('export-jpk/',
                  self.admin_site.admin_view(self.export_jpk_view),
                  name='ksiegowosc_invoice_export_jpk'),
-            path('payments-report/', 
-                 self.admin_site.admin_view(self.payments_report_view), 
+            path('payments-report/',
+                 self.admin_site.admin_view(self.payments_report_view),
                  name='ksiegowosc_invoice_payments_report'),
-            path('overdue-report/', 
-                 self.admin_site.admin_view(self.overdue_report_view), 
+            path('overdue-report/',
+                 self.admin_site.admin_view(self.overdue_report_view),
                  name='ksiegowosc_invoice_overdue_report'),
         ]
         return my_urls + urls
@@ -382,41 +382,41 @@ class InvoiceAdmin(admin.ModelAdmin):
     def payments_report_view(self, request):
         """Raport płatności"""
         today = timezone.now().date()
-        
+
         # Statystyki płatności
         stats = {
             'total_invoices': Invoice.objects.filter(user=request.user).count(),
-            
+
             'paid_invoices': Invoice.objects.filter(user=request.user).filter(
                 payments__amount__gte=F('total_amount')
             ).distinct().count(),
-            
+
             'overdue_invoices': Invoice.objects.filter(
-                user=request.user, 
+                user=request.user,
                 payment_date__lt=today
             ).exclude(
                 payments__amount__gte=F('total_amount')
             ).count(),
-            
+
             'total_outstanding': Invoice.objects.filter(user=request.user).aggregate(
                 total=Sum('total_amount')
             )['total'] or 0,
-            
+
             'total_paid': Payment.objects.filter(
-                user=request.user, 
+                user=request.user,
                 status='completed'
             ).aggregate(
                 total=Sum('amount')
             )['total'] or 0,
         }
-        
+
         stats['outstanding_balance'] = stats['total_outstanding'] - stats['total_paid']
-        
+
         # Najnowsze płatności
         recent_payments = Payment.objects.filter(
             user=request.user
         ).select_related('invoice', 'invoice__contractor').order_by('-payment_date')[:10]
-        
+
         # Przeterminowane faktury
         overdue_invoices = Invoice.objects.filter(
             user=request.user,
@@ -432,38 +432,38 @@ class InvoiceAdmin(admin.ModelAdmin):
             'recent_payments': recent_payments,
             'overdue_invoices': overdue_invoices,
         }
-        
+
         return render(request, 'admin/ksiegowosc/payment_report.html', context)
 
     def overdue_report_view(self, request):
         """Raport przeterminowanych płatności"""
         today = timezone.now().date()
-        
+
         overdue_invoices = Invoice.objects.filter(
             user=request.user,
             payment_date__lt=today
         ).exclude(
             payments__amount__gte=F('total_amount')
         ).select_related('contractor').order_by('payment_date')
-        
+
         # Grupuj po okresach przeterminowania
         overdue_groups = {
-            '1-30': [],
-            '31-60': [],
-            '61-90': [],
-            '90+': []
+            'group_1_30': [],
+            'group_31_60': [],
+            'group_61_90': [],
+            'group_90_plus': []
         }
-        
+
         for invoice in overdue_invoices:
             days_overdue = (today - invoice.payment_date).days
             if days_overdue <= 30:
-                overdue_groups['1-30'].append(invoice)
+                overdue_groups['group_1_30'].append(invoice)
             elif days_overdue <= 60:
-                overdue_groups['31-60'].append(invoice)
+                overdue_groups['group_31_60'].append(invoice)
             elif days_overdue <= 90:
-                overdue_groups['61-90'].append(invoice)
+                overdue_groups['group_61_90'].append(invoice)
             else:
-                overdue_groups['90+'].append(invoice)
+                overdue_groups['group_90_plus'].append(invoice)
 
         context = {
             'opts': self.model._meta,
@@ -471,7 +471,7 @@ class InvoiceAdmin(admin.ModelAdmin):
             'overdue_groups': overdue_groups,
             'total_overdue': len(overdue_invoices),
         }
-        
+
         return render(request, 'admin/ksiegowosc/overdue_report.html', context)
 
     def import_jpk_view(self, request):
@@ -923,13 +923,13 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
             'total_outstanding': Invoice.objects.filter(user=request.user).aggregate(
                 total=Sum('total_amount')
             )['total'] or Decimal('0'),
-            
+
             'total_paid': Payment.objects.filter(
                 user=request.user, status='completed'
             ).aggregate(
-                total=Sum('amount') 
+                total=Sum('amount')
             )['total'] or Decimal('0'),
-            
+
             'overdue_count': Invoice.objects.filter(
                 user=request.user,
                 payment_date__lt=today
@@ -937,9 +937,9 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
                 payments__amount__gte=F('total_amount')
             ).count(),
         }
-        
+
         payment_stats['balance_due'] = payment_stats['total_outstanding'] - payment_stats['total_paid']
-        
+
         # === PORÓWNANIE Z POPRZEDNIM ROKIEM ===
         previous_year = current_year - 1
         previous_year_data = {
@@ -1074,19 +1074,19 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
             'paid': Invoice.objects.filter(user=request.user).filter(
                 payments__amount__gte=F('total_amount')
             ).distinct().count(),
-            
+
             'partial': Invoice.objects.filter(user=request.user).filter(
                 payments__amount__gt=0,
                 payments__amount__lt=F('total_amount')
             ).distinct().count(),
-            
+
             'overdue': Invoice.objects.filter(
-                user=request.user, 
+                user=request.user,
                 payment_date__lt=today
             ).exclude(
                 payments__amount__gte=F('total_amount')
             ).count(),
-            
+
             'unpaid': Invoice.objects.filter(user=request.user).exclude(
                 payments__amount__gt=0
             ).count(),
