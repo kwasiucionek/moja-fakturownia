@@ -10,6 +10,7 @@ import re
 from decimal import Decimal
 
 
+
 KODY_URZEDOW_SKARBOWYCH = [
     ('0202', 'Urząd Skarbowy w Bolesławcu'),
     ('0203', 'Urząd Skarbowy w Dzierżoniowie'),
@@ -641,6 +642,53 @@ class Invoice(models.Model):
         self.total_amount = total
         self.save(update_fields=['total_amount'])
 
+    @property
+    def total_paid(self):
+        """Suma zapłaconych kwot"""
+        return self.payments.filter(status='completed').aggregate(
+            total=Sum('amount')
+        )['total'] or Decimal('0.00')
+
+    @property
+    def balance_due(self):
+        """Pozostała kwota do zapłaty"""
+        return self.total_amount - self.total_paid
+
+    @property
+    def is_fully_paid(self):
+        """Czy faktura jest w pełni opłacona"""
+        return self.balance_due <= Decimal('0.00')
+
+    @property
+    def is_overdue(self):
+        """Czy faktura jest przeterminowana"""
+        from django.utils import timezone
+        return (not self.is_fully_paid and
+                self.payment_date and
+                self.payment_date < timezone.now().date())
+
+    @property
+    def payment_status(self):
+        """Status płatności faktury"""
+        if self.is_fully_paid:
+            return 'paid'
+        elif self.total_paid > 0:
+            return 'partial'
+        elif self.is_overdue:
+            return 'overdue'
+        else:
+            return 'unpaid'
+
+    @property
+    def payment_status_display(self):
+        """Czytelny status płatności"""
+        status_map = {
+            'paid': 'Opłacona',
+            'partial': 'Częściowo opłacona',
+            'overdue': 'Przeterminowana',
+            'unpaid': 'Nieopłacona',
+        }
+        return status_map.get(self.payment_status, 'Nieokreślony')
 
 class InvoiceItem(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
@@ -652,7 +700,6 @@ class InvoiceItem(models.Model):
     total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Wartość")
     lump_sum_tax_rate = models.DecimalField(max_digits=4, decimal_places=2, default=14.00, verbose_name="Stawka ryczałtu (%)")
 
- # === DODAJ NOWE POLE ===
     corrected_item = models.ForeignKey(
         'self',
         on_delete=models.SET_NULL,
@@ -951,3 +998,46 @@ def fetch_zus_rates_from_web(year=None):
             'minimum_base': Decimal('4694.40'),
             'source_url': url
         }
+
+
+class Payment(models.Model):
+    """Płatności od klientów"""
+    PAYMENT_METHODS = [
+        ('przelew', 'Przelew bankowy'),
+        ('gotowka', 'Gotówka'),
+        ('karta', 'Karta płatnicza'),
+        ('blik', 'BLIK'),
+        ('paypal', 'PayPal'),
+        ('inne', 'Inne'),
+    ]
+
+    PAYMENT_STATUS = [
+        ('pending', 'Oczekująca'),
+        ('completed', 'Zrealizowana'),
+        ('cancelled', 'Anulowana'),
+        ('refunded', 'Zwrócona'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments', verbose_name="Faktura")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Kwota")
+    payment_date = models.DateField(verbose_name="Data płatności")
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default='przelew', verbose_name="Sposób płatności")
+    bank_reference = models.CharField(max_length=100, blank=True, verbose_name="Numer referencyjny banku")
+    notes = models.TextField(blank=True, verbose_name="Uwagi")
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS, default='completed', verbose_name="Status")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Płatność"
+        verbose_name_plural = "Płatności"
+        ordering = ['-payment_date']
+
+    def __str__(self):
+        return f"Płatność {self.amount} PLN za {self.invoice.invoice_number}"
+
+    def save(self, *args, **kwargs):
+        if not hasattr(self, 'user') or not self.user:
+            self.user = self.invoice.user
+        super().save(*args, **kwargs)

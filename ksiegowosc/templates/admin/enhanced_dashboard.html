@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load static admin_urls %}
+{% load static admin_urls payment_filters %}
 
 {% block title %}Dashboard - {{ title }}{% endblock %}
 
@@ -13,7 +13,7 @@
 .recent-activity { max-height: 400px; overflow-y: auto; }
 .pending-alert { border-left: 4px solid #dc3545; }
 .year-progress { margin: 20px 0; }
-.progress-label { display: flex; justify-content: between; margin-bottom: 5px; font-size: 14px; }
+.progress-label { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
 .comparison-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
 .prognosis-card { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
 .reminder-item { margin-bottom: 15px; padding: 15px; border-radius: 8px; }
@@ -21,6 +21,34 @@
 .reminder-warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
 .reminder-success { background-color: #d4edda; border-left: 4px solid #28a745; }
 .year-summary { background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%); color: white; }
+.payment-summary { background: linear-gradient(135deg, #00b894 0%, #00a085 100%); color: white; }
+.info-box { 
+    background: #fff; 
+    border-radius: 8px; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+    margin-bottom: 20px; 
+    display: flex;
+    align-items: center;
+}
+.info-box-icon { 
+    width: 60px; 
+    height: 60px; 
+    line-height: 60px; 
+    text-align: center; 
+    color: white; 
+    font-size: 24px; 
+    border-radius: 8px 0 0 8px; 
+    flex-shrink: 0;
+}
+.info-box-content { 
+    padding: 15px; 
+    flex-grow: 1;
+}
+.info-box-number {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #333;
+}
 </style>
 {% endblock %}
 
@@ -175,6 +203,66 @@
             </div>
             {% endif %}
 
+            <!-- STATYSTYKI PŁATNOŚCI -->
+            {% if payment_stats %}
+            <div class="row">
+                <div class="col-12">
+                    <div class="card payment-summary">
+                        <div class="card-header">
+                            <h4 class="card-title text-white">
+                                <i class="fas fa-money-bill-wave"></i> Podsumowanie płatności
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-md-3">
+                                    <h5>Wystawione faktury</h5>
+                                    <h3>{{ payment_stats.total_outstanding|floatformat:0 }} PLN</h3>
+                                </div>
+                                <div class="col-md-3">
+                                    <h5>Otrzymane płatności</h5>
+                                    <h3>{{ payment_stats.total_paid|floatformat:0 }} PLN</h3>
+                                </div>
+                                <div class="col-md-3">
+                                    <h5>Do zapłaty</h5>
+                                    <h3>{{ payment_stats.balance_due|floatformat:0 }} PLN</h3>
+                                </div>
+                                <div class="col-md-3">
+                                    <h5>% Opłacalności</h5>
+                                    <h3>
+                                        {% if payment_stats.total_outstanding > 0 %}
+                                            {{ payment_stats.total_paid|div:payment_stats.total_outstanding|mul:100|floatformat:1 }}%
+                                        {% else %}
+                                            100%
+                                        {% endif %}
+                                    </h3>
+                                </div>
+                            </div>
+                            
+                            <!-- Pasek postępu płatności -->
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between small text-white-50 mb-1">
+                                    <span>Postęp płatności</span>
+                                    <span>
+                                        {% if payment_stats.total_outstanding > 0 %}
+                                            {{ payment_stats.total_paid|div:payment_stats.total_outstanding|mul:100|floatformat:1 }}%
+                                        {% else %}
+                                            100%
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar bg-light" role="progressbar" 
+                                         style="width: {% if payment_stats.total_outstanding > 0 %}{{ payment_stats.total_paid|div:payment_stats.total_outstanding|mul:100 }}{% else %}100{% endif %}%">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- PRZYPOMNIENIA I TERMINY -->
             {% if reminders %}
             <div class="row">
@@ -202,6 +290,24 @@
                             </div>
                             {% endfor %}
                         </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- PRZETERMINOWANE PŁATNOŚCI - ALERT -->
+            {% if payment_stats.overdue_count > 0 %}
+            <div class="row">
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <h5><i class="fas fa-exclamation-triangle"></i> Uwaga! Przeterminowane płatności</h5>
+                        <p>Masz <strong>{{ payment_stats.overdue_count }}</strong> przeterminowanych faktur.</p>
+                        <a href="{% url 'admin:ksiegowosc_invoice_overdue_report' %}" class="btn btn-danger btn-sm">
+                            <i class="fas fa-list"></i> Zobacz szczegóły
+                        </a>
+                        <a href="{% url 'admin:ksiegowosc_invoice_changelist' %}?payment_status=overdue" class="btn btn-outline-danger btn-sm">
+                            <i class="fas fa-search"></i> Filtruj faktury
+                        </a>
                     </div>
                 </div>
             </div>
@@ -256,6 +362,57 @@
                 </div>
             </div>
 
+            <!-- DODATKOWE STATYSTYKI PŁATNOŚCI -->
+            {% if payment_stats %}
+            <div class="row">
+                <div class="col-lg-3 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-success"><i class="fas fa-money-bill-wave"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Zapłacone faktury</span>
+                            <span class="info-box-number">{{ payment_stats.total_paid|floatformat:0 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-warning"><i class="fas fa-hourglass-half"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Do zapłaty</span>
+                            <span class="info-box-number">{{ payment_stats.balance_due|floatformat:0 }} PLN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-danger"><i class="fas fa-exclamation-triangle"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Przeterminowane</span>
+                            <span class="info-box-number">{{ payment_stats.overdue_count }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-6">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-info"><i class="fas fa-percentage"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">% Opłacalności</span>
+                            <span class="info-box-number">
+                                {% if payment_stats.total_outstanding > 0 %}
+                                    {{ payment_stats.total_paid|div:payment_stats.total_outstanding|mul:100|floatformat:1 }}%
+                                {% else %}
+                                    0%
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- WYKRESY -->
             <div class="row">
                 <!-- Wykres podstawy opodatkowania -->
@@ -290,6 +447,41 @@
                     </div>
                 </div>
             </div>
+
+            <!-- WYKRES PŁATNOŚCI VS FAKTURY -->
+            {% if payments_chart %}
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card dashboard-card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-chart-line"></i> Płatności vs Faktury miesięczne
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="paymentsChart" style="height: 350px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card dashboard-card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-chart-pie"></i> Status faktur
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="paymentStatusChart" style="height: 350px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- WYKRES PRZYCHODÓW I OSTATNIE FAKTURY -->
             <div class="row">
@@ -384,6 +576,54 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- SZYBKIE AKCJE PŁATNOŚCI -->
+                    {% if payment_stats %}
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">
+                                <i class="fas fa-money-bill"></i> Płatności
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if payment_stats.overdue_count > 0 %}
+                                <div class="alert alert-warning mb-3">
+                                    <small><strong>{{ payment_stats.overdue_count }} przeterminowanych płatności</strong></small>
+                                </div>
+                            {% endif %}
+                            
+                            <div class="btn-group-vertical d-block">
+                                <a href="{% url 'admin:ksiegowosc_payment_add' %}" 
+                                   class="btn btn-success btn-sm mb-2">
+                                    <i class="fas fa-plus"></i> Dodaj płatność
+                                </a>
+                                <a href="{% url 'admin:ksiegowosc_invoice_payments_report' %}" 
+                                   class="btn btn-info btn-sm mb-2">
+                                    <i class="fas fa-chart-bar"></i> Raport płatności
+                                </a>
+                                <a href="{% url 'admin:ksiegowosc_invoice_overdue_report' %}" 
+                                   class="btn btn-warning btn-sm">
+                                    <i class="fas fa-clock"></i> Przeterminowane
+                                </a>
+                            </div>
+                            
+                            <!-- Mini wykres płatności -->
+                            <div class="mt-3">
+                                <small class="text-muted">
+                                    <strong>Płatności vs Należności:</strong><br>
+                                    Zapłacone: {{ payment_stats.total_paid|floatformat:0 }} PLN<br>
+                                    Do zapłaty: {{ payment_stats.balance_due|floatformat:0 }} PLN
+                                </small>
+                                
+                                <div class="progress mt-2" style="height: 10px;">
+                                    <div class="progress-bar bg-success" role="progressbar" 
+                                         style="width: {% if payment_stats.total_outstanding > 0 %}{{ payment_stats.total_paid|div:payment_stats.total_outstanding|mul:100 }}{% else %}0{% endif %}%">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -493,6 +733,94 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    {% if payments_chart %}
+    // Wykres płatności vs faktury
+    const paymentsCtx = document.getElementById('paymentsChart').getContext('2d');
+    new Chart(paymentsCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ revenue_chart.labels|safe }},
+            datasets: [
+                {
+                    label: 'Wystawione faktury',
+                    data: {{ revenue_chart.data|safe }},
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgb(54, 162, 235)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Otrzymane płatności',
+                    data: {{ payments_chart.data|safe }},
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderColor: 'rgb(75, 192, 192)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString('pl-PL') + ' PLN';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Wykres typu donut - status płatności
+    {% if payment_status_stats %}
+    const statusCtx = document.getElementById('paymentStatusChart').getContext('2d');
+    new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Opłacone', 'Częściowo opłacone', 'Przeterminowane', 'Nieopłacone'],
+            datasets: [{
+                data: [
+                    {{ payment_status_stats.paid|default:0 }},
+                    {{ payment_status_stats.partial|default:0 }},
+                    {{ payment_status_stats.overdue|default:0 }},
+                    {{ payment_status_stats.unpaid|default:0 }}
+                ],
+                backgroundColor: [
+                    '#28a745', // zielony - opłacone
+                    '#ffc107', // żółty - częściowo
+                    '#dc3545', // czerwony - przeterminowane  
+                    '#6c757d'  // szary - nieopłacone
+                ],
+                borderColor: '#ffffff',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + context.parsed + ' faktur';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+    {% endif %}
 });
 </script>
+
 {% endblock %}
