@@ -1,0 +1,437 @@
+{% extends "admin/base_site.html" %}
+{% load static admin_urls %}
+
+{% block title %}Analiza kosztów po kategoriach{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid pt-3">
+    <h1 class="mb-4">
+        <i class="fas fa-chart-pie"></i> Analiza kosztów po kategoriach
+    </h1>
+
+    <!-- Okres analizy -->
+    <div class="alert alert-info mb-4">
+        <h6><i class="fas fa-calendar"></i> Okres analizy: {{ start_date|date:"d.m.Y" }} - {{ end_date|date:"d.m.Y" }}</h6>
+        <p class="mb-0">Ostatnie 12 miesięcy aktywności finansowej</p>
+    </div>
+
+    <!-- Statystyki kategorii -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-list"></i> Koszty według kategorii</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Kategoria</th>
+                                    <th class="text-center">Liczba faktur</th>
+                                    <th class="text-end">Kwota netto</th>
+                                    <th class="text-end">Kwota brutto</th>
+                                    <th class="text-end">Średnia na fakturę</th>
+                                    <th class="text-center">Udział %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cat in category_stats %}
+                                <tr>
+                                    <td>
+                                        <span class="category-badge" style="background-color: {{ cat.color|default:'#6c757d' }};">
+                                            {{ cat.category|capfirst }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">{{ cat.count }}</td>
+                                    <td class="text-end">{{ cat.total_net|floatformat:2 }} PLN</td>
+                                    <td class="text-end"><strong>{{ cat.total_gross|floatformat:2 }} PLN</strong></td>
+                                    <td class="text-end">{{ cat.avg_amount|floatformat:2 }} PLN</td>
+                                    <td class="text-center">
+                                        {% with total_sum=category_stats|sum_attribute:"total_gross" %}
+                                            {% if total_sum > 0 %}
+                                                <span class="percentage-badge">
+                                                    {{ cat.total_gross|div:total_sum|mul:100|floatformat:1 }}%
+                                                </span>
+                                            {% else %}
+                                                <span class="percentage-badge">0%</span>
+                                            {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        Brak danych o kosztach w wybranym okresie
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            {% if category_stats %}
+                            <tfoot>
+                                <tr class="table-light">
+                                    <th>RAZEM:</th>
+                                    <th class="text-center">
+                                        {% for cat in category_stats %}{{ cat.count|add:0 }}{% if not forloop.last %} + {% endif %}{% endfor %} = 
+                                        {{ category_stats|sum_attribute:"count"|default:0 }}
+                                    </th>
+                                    <th class="text-end">
+                                        {{ category_stats|sum_attribute:"total_net"|floatformat:2|default:"0.00" }} PLN
+                                    </th>
+                                    <th class="text-end">
+                                        <strong>{{ category_stats|sum_attribute:"total_gross"|floatformat:2|default:"0.00" }} PLN</strong>
+                                    </th>
+                                    <th class="text-end">-</th>
+                                    <th class="text-center"><strong>100%</strong></th>
+                                </tr>
+                            </tfoot>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6><i class="fas fa-chart-pie"></i> Rozkład kosztów</h6>
+                </div>
+                <div class="card-body">
+                    <div style="height: 300px;">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top 3 kategorie -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6><i class="fas fa-trophy"></i> Największe koszty</h6>
+                </div>
+                <div class="card-body">
+                    {% for cat in category_stats|slice:":3" %}
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <strong>{{ forloop.counter }}. {{ cat.category|capfirst }}</strong>
+                            <span class="text-muted">{{ cat.count }} faktur</span>
+                        </div>
+                        <div class="progress mt-1" style="height: 8px;">
+                            <div class="progress-bar" role="progressbar" 
+                                 style="width: {% with total=category_stats|sum_attribute:'total_gross' %}{% if total > 0 %}{{ cat.total_gross|div:total|mul:100 }}{% else %}0{% endif %}{% endwith %}%">
+                            </div>
+                        </div>
+                        <small class="text-muted">{{ cat.total_gross|floatformat:2 }} PLN</small>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted">Brak danych</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trendy miesięczne -->
+    {% if monthly_stats %}
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5><i class="fas fa-chart-line"></i> Trendy miesięczne - ostatnie 12 miesięcy</h5>
+        </div>
+        <div class="card-body">
+            <div style="height: 400px;">
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Statystyki dodatkowe -->
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="info-box">
+                <span class="info-box-icon bg-primary"><i class="fas fa-file-invoice"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Łącznie faktur</span>
+                    <span class="info-box-number">{{ category_stats|sum_attribute:"count"|default:0 }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="info-box">
+                <span class="info-box-icon bg-success"><i class="fas fa-calculator"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Średnia miesięczna</span>
+                    <span class="info-box-number">
+                        {% with total=category_stats|sum_attribute:"total_gross" %}
+                            {{ total|div:12|floatformat:0|default:0 }} PLN
+                        {% endwith %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="info-box">
+                <span class="info-box-icon bg-warning"><i class="fas fa-tags"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Aktywne kategorie</span>
+                    <span class="info-box-number">{{ category_stats|length }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Akcje -->
+    <div class="mt-4 text-center">
+        <a href="{% url 'admin:ksiegowosc_purchaseinvoice_changelist' %}" class="btn btn-secondary me-3">
+            <i class="fas fa-arrow-left"></i> Powrót do listy
+        </a>
+        <a href="{% url 'admin:ksiegowosc_purchaseinvoice_expenses_report' %}" class="btn btn-info me-3">
+            <i class="fas fa-chart-bar"></i> Raport kosztów
+        </a>
+        <a href="{% url 'admin:ksiegowosc_expensecategory_changelist' %}" class="btn btn-primary">
+            <i class="fas fa-cogs"></i> Zarządzaj kategoriami
+        </a>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Wykres kołowy kategorii
+    const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+    const categoryLabels = [
+        {% for cat in category_stats %}
+            '{{ cat.category|capfirst }}',
+        {% endfor %}
+    ];
+    const categoryData = [
+        {% for cat in category_stats %}
+            {{ cat.total_gross|default:0 }},
+        {% endfor %}
+    ];
+    const categoryColors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', 
+        '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+    ];
+
+    new Chart(categoryCtx, {
+        type: 'doughnut',
+        data: {
+            labels: categoryLabels,
+            datasets: [{
+                data: categoryData,
+                backgroundColor: categoryColors.slice(0, categoryData.length),
+                borderColor: '#ffffff',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 15,
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const value = context.parsed;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return context.label + ': ' + value.toLocaleString('pl-PL') + ' PLN (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Wykres liniowy trendów miesięcznych
+    {% if monthly_stats %}
+    const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+    const monthlyLabels = [
+        {% for stat in monthly_stats %}
+            '{{ stat.month|date:"M Y" }}',
+        {% endfor %}
+    ];
+    const monthlyAmounts = [
+        {% for stat in monthly_stats %}
+            {{ stat.total|default:0 }},
+        {% endfor %}
+    ];
+    const monthlyCounts = [
+        {% for stat in monthly_stats %}
+            {{ stat.count|default:0 }},
+        {% endfor %}
+    ];
+
+    new Chart(monthlyCtx, {
+        type: 'line',
+        data: {
+            labels: monthlyLabels,
+            datasets: [
+                {
+                    label: 'Kwota (PLN)',
+                    data: monthlyAmounts,
+                    borderColor: '#36A2EB',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Liczba faktur',
+                    data: monthlyCounts,
+                    borderColor: '#FF6384',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Miesiąc'
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Kwota (PLN)'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString('pl-PL') + ' PLN';
+                        }
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Liczba faktur'
+                    },
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+});
+</script>
+
+<style>
+.category-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.percentage-badge {
+    background-color: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #495057;
+}
+
+.info-box { 
+    background: #fff; 
+    border-radius: 8px; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+    margin-bottom: 20px; 
+    display: flex;
+    align-items: center;
+    min-height: 80px;
+}
+.info-box-icon { 
+    width: 70px; 
+    height: 70px; 
+    line-height: 70px; 
+    text-align: center; 
+    color: white; 
+    font-size: 28px; 
+    border-radius: 8px 0 0 8px; 
+    flex-shrink: 0;
+}
+.info-box-content { 
+    padding: 15px 20px; 
+    flex-grow: 1;
+}
+.info-box-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #6c757d;
+    margin-bottom: 5px;
+    display: block;
+}
+.info-box-number {
+    font-size: 20px;
+    font-weight: bold;
+    color: #333;
+    line-height: 1.2;
+}
+.bg-primary { background-color: #007bff; }
+.bg-success { background-color: #28a745; }
+.bg-warning { background-color: #ffc107; }
+
+.progress {
+    height: 8px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    background-color: #007bff;
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.me-3 { margin-right: 1rem; }
+</style>
+{% endblock %}

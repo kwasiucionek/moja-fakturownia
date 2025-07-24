@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 from decimal import Decimal
-
+from django.db.models import Sum
 
 
 KODY_URZEDOW_SKARBOWYCH = [
@@ -1041,3 +1041,283 @@ class Payment(models.Model):
         if not hasattr(self, 'user') or not self.user:
             self.user = self.invoice.user
         super().save(*args, **kwargs)
+
+
+# Kategorie kosztów
+EXPENSE_CATEGORIES = [
+    ('materials', 'Materiały i towary'),
+    ('services', 'Usługi'),
+    ('office', 'Koszty biurowe'),
+    ('transport', 'Transport i paliwo'),
+    ('marketing', 'Marketing i reklama'),
+    ('software', 'Oprogramowanie i licencje'),
+    ('equipment', 'Sprzęt i narzędzia'),
+    ('rent', 'Czynsz i najem'),
+    ('utilities', 'Media (prąd, gaz, woda)'),
+    ('insurance', 'Ubezpieczenia'),
+    ('legal', 'Usługi prawne i doradcze'),
+    ('training', 'Szkolenia i rozwój'),
+    ('travel', 'Podróże służbowe'),
+    ('maintenance', 'Naprawy i konserwacja'),
+    ('telecommunications', 'Telekomunikacja'),
+    ('other', 'Inne koszty'),
+]
+
+VAT_RATES = [
+    ('0', '0%'),
+    ('5', '5%'),
+    ('8', '8%'),
+    ('23', '23%'),
+    ('zw', 'Zwolniony'),
+    ('np', 'Nie podlega'),
+]
+
+class ExpenseCategory(models.Model):
+    """Kategorie kosztów dla lepszej organizacji"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    name = models.CharField(max_length=100, verbose_name="Nazwa kategorii")
+    code = models.CharField(max_length=20, verbose_name="Kod kategorii")
+    description = models.TextField(blank=True, verbose_name="Opis")
+    is_active = models.BooleanField(default=True, verbose_name="Aktywna")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Kategoria kosztów"
+        verbose_name_plural = "Kategorie kosztów"
+        unique_together = ['user', 'code']
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+class PurchaseInvoice(models.Model):
+    """Faktury zakupu - koszty działalności"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    invoice_number = models.CharField(max_length=50, verbose_name="Numer faktury")
+    supplier = models.ForeignKey(
+        Contractor,
+        on_delete=models.PROTECT,
+        verbose_name="Dostawca",
+        help_text="Kontrahent, od którego kupujemy"
+    )
+
+    # Daty
+    issue_date = models.DateField(verbose_name="Data wystawienia")
+    receipt_date = models.DateField(verbose_name="Data otrzymania", help_text="Kiedy otrzymaliśmy fakturę")
+    service_date = models.DateField(verbose_name="Data świadczenia usługi/dostawy")
+    payment_due_date = models.DateField(verbose_name="Termin płatności", blank=True, null=True)
+
+    # Kwoty
+    net_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Kwota netto")
+    vat_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Kwota VAT")
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Kwota brutto")
+
+    # Kategoryzacja
+    category = models.CharField(
+        max_length=50,
+        choices=EXPENSE_CATEGORIES,
+        verbose_name="Kategoria",
+        help_text="Rodzaj kosztu"
+    )
+    expense_category = models.ForeignKey(
+        ExpenseCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Szczegółowa kategoria"
+    )
+
+    # Opcje podatkowe
+    is_deductible = models.BooleanField(default=True, verbose_name="Koszt uzyskania przychodu")
+    vat_deductible = models.BooleanField(default=True, verbose_name="VAT do odliczenia")
+
+    # Płatności
+    is_paid = models.BooleanField(default=False, verbose_name="Opłacona")
+    payment_date = models.DateField(blank=True, null=True, verbose_name="Data zapłaty")
+    payment_method = models.CharField(
+        max_length=50,
+        choices=[
+            ('transfer', 'Przelew'),
+            ('cash', 'Gotówka'),
+            ('card', 'Karta'),
+            ('other', 'Inne')
+        ],
+        default='transfer',
+        verbose_name="Sposób płatności"
+    )
+
+    # Dodatkowe
+    description = models.TextField(blank=True, verbose_name="Opis")
+    notes = models.TextField(blank=True, verbose_name="Uwagi")
+    document_file = models.FileField(
+        upload_to='purchase_invoices/',
+        blank=True,
+        null=True,
+        verbose_name="Plik faktury"
+    )
+
+    # Metadane
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Faktura zakupu"
+        verbose_name_plural = "Faktury zakupu"
+        ordering = ['-issue_date', '-receipt_date']
+        unique_together = ['user', 'invoice_number', 'supplier']
+
+    def __str__(self):
+        return f"Faktura {self.invoice_number} od {self.supplier.name}"
+
+    def save(self, *args, **kwargs):
+        # Automatycznie oblicz total_amount jeśli nie podano
+        if not self.total_amount:
+            self.total_amount = self.net_amount + self.vat_amount
+
+        # Automatycznie ustaw termin płatności jeśli nie podano
+        if not self.payment_due_date:
+            self.payment_due_date = self.issue_date + timedelta(days=14)
+
+        super().save(*args, **kwargs)
+
+    @property
+    def is_overdue(self):
+        """Sprawdza czy faktura jest przeterminowana"""
+        if self.is_paid:
+            return False
+        return self.payment_due_date and self.payment_due_date < timezone.now().date()
+
+    @property
+    def days_overdue(self):
+        """Ile dni przeterminowana"""
+        if not self.is_overdue:
+            return 0
+        return (timezone.now().date() - self.payment_due_date).days
+
+    @property
+    def payment_status(self):
+        """Status płatności"""
+        if self.is_paid:
+            return 'paid'
+        elif self.is_overdue:
+            return 'overdue'
+        else:
+            return 'pending'
+
+    @property
+    def payment_status_display(self):
+        """Czytelny status płatności"""
+        status_map = {
+            'paid': 'Opłacona',
+            'overdue': 'Przeterminowana',
+            'pending': 'Oczekuje płatności',
+        }
+        return status_map.get(self.payment_status, 'Nieokreślony')
+
+    def get_vat_rate_display(self):
+        """Zwraca stawkę VAT w procentach"""
+        if self.net_amount > 0 and self.vat_amount > 0:
+            rate = (self.vat_amount / self.net_amount * 100).quantize(Decimal('0.01'))
+            return f"{rate}%"
+        return "0%"
+
+
+class PurchaseInvoiceItem(models.Model):
+    """Pozycje na fakturach zakupu"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    invoice = models.ForeignKey(
+        PurchaseInvoice,
+        related_name='items',
+        on_delete=models.CASCADE,
+        verbose_name="Faktura"
+    )
+
+    name = models.CharField(max_length=255, verbose_name="Nazwa towaru/usługi")
+    description = models.TextField(blank=True, verbose_name="Opis")
+    quantity = models.DecimalField(max_digits=10, decimal_places=3, default=1, verbose_name="Ilość")
+    unit = models.CharField(max_length=10, default='szt.', verbose_name="J.M.")
+
+    unit_price_net = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Cena jedn. netto")
+    vat_rate = models.CharField(max_length=5, choices=VAT_RATES, default='23', verbose_name="Stawka VAT")
+
+    net_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Wartość netto")
+    vat_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Wartość VAT")
+    gross_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Wartość brutto")
+
+    category = models.CharField(
+        max_length=50,
+        choices=EXPENSE_CATEGORIES,
+        verbose_name="Kategoria",
+        blank=True
+    )
+
+    class Meta:
+        verbose_name = "Pozycja faktury zakupu"
+        verbose_name_plural = "Pozycje faktur zakupu"
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.name} - {self.gross_value} PLN"
+
+    def save(self, *args, **kwargs):
+        # Automatyczne obliczenia
+        self.net_value = self.quantity * self.unit_price_net
+
+        # Oblicz VAT
+        if self.vat_rate == 'zw' or self.vat_rate == 'np':
+            self.vat_value = Decimal('0.00')
+        else:
+            vat_rate_decimal = Decimal(self.vat_rate) / 100
+            self.vat_value = self.net_value * vat_rate_decimal
+
+        self.gross_value = self.net_value + self.vat_value
+
+        super().save(*args, **kwargs)
+
+        # Aktualizuj sumy na fakturze
+        self.update_invoice_totals()
+
+    def delete(self, *args, **kwargs):
+        invoice = self.invoice
+        super().delete(*args, **kwargs)
+        # Aktualizuj sumy po usunięciu pozycji
+        self.update_invoice_totals_for_invoice(invoice)
+
+    def update_invoice_totals(self):
+        """Aktualizuje sumy na fakturze na podstawie pozycji"""
+        self.update_invoice_totals_for_invoice(self.invoice)
+
+    @staticmethod
+    def update_invoice_totals_for_invoice(invoice):
+        """Aktualizuje sumy dla podanej faktury"""
+        totals = invoice.items.aggregate(
+            net_total=Sum('net_value'),
+            vat_total=Sum('vat_value'),
+            gross_total=Sum('gross_value')
+        )
+
+        invoice.net_amount = totals['net_total'] or Decimal('0.00')
+        invoice.vat_amount = totals['vat_total'] or Decimal('0.00')
+        invoice.total_amount = totals['gross_total'] or Decimal('0.00')
+        invoice.save(update_fields=['net_amount', 'vat_amount', 'total_amount'])
+
+
+class ExpenseReport(models.Model):
+    """Raporty kosztów za okresy"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    period_start = models.DateField(verbose_name="Początek okresu")
+    period_end = models.DateField(verbose_name="Koniec okresu")
+
+    total_expenses = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Łączne koszty")
+    deductible_expenses = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Koszty uzyskania przychodu")
+    vat_to_deduct = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="VAT do odliczenia")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Raport kosztów"
+        verbose_name_plural = "Raporty kosztów"
+        ordering = ['-period_end']
+
+    def __str__(self):
+        return f"Koszty {self.period_start} - {self.period_end}"
