@@ -13,6 +13,16 @@
             Eksportuj zaznaczone do JPK
         </a>
     </li>
+    <li>
+        <a href="{% url 'admin:ksiegowosc_invoice_payments_report' %}" class="btn btn-info">
+            <i class="fas fa-chart-bar"></i> Raport płatności
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'admin:ksiegowosc_invoice_overdue_report' %}" class="btn btn-warning">
+            <i class="fas fa-clock"></i> Przeterminowane
+        </a>
+    </li>
     {{ block.super }}
 {% endblock %}
 
