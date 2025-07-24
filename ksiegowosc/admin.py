@@ -289,7 +289,7 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
     def dashboard_view(self, request):
-        """Główny dashboard z wykresami i statystykami"""
+        """Dashboard z integracją rozliczenia rocznego"""
 
         context = {
             'opts': self.model._meta,
@@ -298,11 +298,167 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
             'current_month': datetime.now().month,
         }
 
-        # Dane dla wykresów (ostatnie 12 miesięcy)
+        current_year = datetime.now().year
         end_date = datetime.now()
         start_date = end_date - timedelta(days=365)
 
-        # 1. Wykres przychodów miesięcznych
+        # === DANE ROZLICZENIA ROCZNEGO ===
+
+        # Sprawdź czy istnieje rozliczenie roczne dla bieżącego roku
+        current_yearly_settlement = YearlySettlement.objects.filter(
+            user=request.user, year=current_year
+        ).first()
+
+        # Oblicz aktualny stan w roku (bez oficjalnego rozliczenia)
+        current_year_summary = {
+            'total_revenue': Invoice.objects.filter(
+                user=request.user, issue_date__year=current_year
+            ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0'),
+
+            'total_social_insurance': MonthlySettlement.objects.filter(
+                user=request.user, year=current_year
+            ).aggregate(total=Sum('social_insurance_paid'))['total'] or Decimal('0'),
+
+            'total_health_insurance': MonthlySettlement.objects.filter(
+                user=request.user, year=current_year
+            ).aggregate(total=Sum('health_insurance_paid'))['total'] or Decimal('0'),
+
+            'total_labor_fund': MonthlySettlement.objects.filter(
+                user=request.user, year=current_year
+            ).aggregate(total=Sum('labor_fund_paid'))['total'] or Decimal('0'),
+
+            'total_monthly_tax': MonthlySettlement.objects.filter(
+                user=request.user, year=current_year
+            ).aggregate(total=Sum('income_tax_payable'))['total'] or Decimal('0'),
+        }
+
+        # Oblicz prognozowaną podstawę opodatkowania i podatek
+        tax_base = current_year_summary['total_revenue'] - current_year_summary['total_social_insurance']
+        tax_base_after_health = tax_base - (current_year_summary['total_health_insurance'] / 2)
+        if tax_base_after_health < 0:
+            tax_base_after_health = Decimal('0')
+
+        # Pobierz stawkę podatku z danych firmy lub użyj domyślną 14%
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        tax_rate = Decimal('14.0')  # domyślnie
+        if company_info and company_info.lump_sum_rate:
+            tax_rate = Decimal(company_info.lump_sum_rate)
+
+        projected_yearly_tax = (tax_base_after_health * tax_rate / 100).quantize(Decimal('0.01'))
+        projected_difference = projected_yearly_tax - current_year_summary['total_monthly_tax']
+
+        current_year_summary.update({
+            'tax_base': tax_base,
+            'tax_base_after_health': tax_base_after_health,
+            'projected_yearly_tax': projected_yearly_tax,
+            'projected_difference': projected_difference,
+            'tax_rate': tax_rate,
+        })
+
+        context['current_year_summary'] = current_year_summary
+        context['current_yearly_settlement'] = current_yearly_settlement
+        context['company_info'] = company_info
+
+        # === PORÓWNANIE Z POPRZEDNIM ROKIEM ===
+        previous_year = current_year - 1
+        previous_year_data = {
+            'total_revenue': Invoice.objects.filter(
+                user=request.user, issue_date__year=previous_year
+            ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0'),
+
+            'total_tax_paid': MonthlySettlement.objects.filter(
+                user=request.user, year=previous_year
+            ).aggregate(total=Sum('income_tax_payable'))['total'] or Decimal('0'),
+        }
+
+        # Oblicz wzrost/spadek
+        revenue_change = 0
+        tax_change = 0
+        if previous_year_data['total_revenue'] > 0:
+            revenue_change = ((current_year_summary['total_revenue'] - previous_year_data['total_revenue']) / previous_year_data['total_revenue'] * 100)
+        if previous_year_data['total_tax_paid'] > 0:
+            tax_change = ((current_year_summary['total_monthly_tax'] - previous_year_data['total_tax_paid']) / previous_year_data['total_tax_paid'] * 100)
+
+        context['previous_year_data'] = previous_year_data
+        context['revenue_change'] = revenue_change
+        context['tax_change'] = tax_change
+
+        # === PROGRES ROKU PODATKOWEGO ===
+        # Oblicz ile % roku już minęło
+        start_of_year = datetime(current_year, 1, 1)
+        end_of_year = datetime(current_year, 12, 31)
+        days_in_year = (end_of_year - start_of_year).days + 1
+        days_passed = (datetime.now() - start_of_year).days + 1
+        year_progress = (days_passed / days_in_year) * 100
+
+        # Prognoza na koniec roku (ekstrapolacja)
+        if days_passed > 0:
+            daily_revenue = current_year_summary['total_revenue'] / days_passed
+            projected_end_year_revenue = daily_revenue * days_in_year
+
+            daily_tax = current_year_summary['total_monthly_tax'] / days_passed
+            projected_end_year_tax = daily_tax * days_in_year
+        else:
+            projected_end_year_revenue = current_year_summary['total_revenue']
+            projected_end_year_tax = current_year_summary['total_monthly_tax']
+
+        context['year_progress'] = {
+            'percentage': round(year_progress, 1),
+            'days_passed': days_passed,
+            'days_total': days_in_year,
+            'projected_end_year_revenue': projected_end_year_revenue,
+            'projected_end_year_tax': projected_end_year_tax,
+        }
+
+        # === WYKRES PODSTAWY OPODATKOWANIA ===
+        # Miesięczna podstawa opodatkowania (przychody - składki społeczne)
+        monthly_tax_base = []
+        tax_base_labels = []
+
+        for month in range(1, 13):
+            monthly_revenue = Invoice.objects.filter(
+                user=request.user,
+                issue_date__year=current_year,
+                issue_date__month=month
+            ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+
+            monthly_social = MonthlySettlement.objects.filter(
+                user=request.user,
+                year=current_year,
+                month=month
+            ).aggregate(total=Sum('social_insurance_paid'))['total'] or Decimal('0')
+
+            base = monthly_revenue - monthly_social
+            monthly_tax_base.append(float(base))
+            tax_base_labels.append(f"{month:02d}/{current_year}")
+
+        context['tax_base_chart'] = {
+            'labels': json.dumps(tax_base_labels),
+            'data': json.dumps(monthly_tax_base)
+        }
+
+        # === WYKRES PORÓWNANIA LAT ===
+        years_comparison = []
+        comparison_labels = []
+
+        # Ostatnie 3 lata
+        for year in range(current_year - 2, current_year + 1):
+            yearly_revenue = Invoice.objects.filter(
+                user=request.user, issue_date__year=year
+            ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+
+            years_comparison.append(float(yearly_revenue))
+            comparison_labels.append(str(year))
+
+        context['years_comparison_chart'] = {
+            'labels': json.dumps(comparison_labels),
+            'data': json.dumps(years_comparison)
+        }
+
+        # === STANDARDOWE DANE DASHBOARD ===
+        # (tutaj kod z poprzedniej wersji dla podstawowych wykresów)
+
+        # Wykres przychodów miesięcznych
         monthly_revenue = Invoice.objects.filter(
             user=request.user,
             issue_date__gte=start_date
@@ -323,97 +479,76 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
             'data': json.dumps(revenue_data)
         }
 
-        # 2. Wykres składek ZUS (ostatnie 12 miesięcy)
-        zus_settlements = MonthlySettlement.objects.filter(
-            user=request.user,
-            year__gte=start_date.year
-        ).order_by('year', 'month')
-
-        zus_labels = []
-        zus_social_data = []
-        zus_health_data = []
-        zus_labor_data = []
-
-        for settlement in zus_settlements:
-            zus_labels.append(f"{settlement.year}-{settlement.month:02d}")
-            zus_social_data.append(float(settlement.social_insurance_paid))
-            zus_health_data.append(float(settlement.health_insurance_paid))
-            zus_labor_data.append(float(settlement.labor_fund_paid))
-
-        context['zus_chart'] = {
-            'labels': json.dumps(zus_labels),
-            'social_data': json.dumps(zus_social_data),
-            'health_data': json.dumps(zus_health_data),
-            'labor_data': json.dumps(zus_labor_data)
-        }
-
-        # 3. Statystyki bieżącego roku
-        current_year = datetime.now().year
-        year_stats = {
-            'total_revenue': Invoice.objects.filter(
-                user=request.user,
-                issue_date__year=current_year
-            ).aggregate(total=Sum('total_amount'))['total'] or 0,
-
-            'invoices_count': Invoice.objects.filter(
-                user=request.user,
-                issue_date__year=current_year
-            ).count(),
-
-            'corrections_count': Invoice.objects.filter(
-                user=request.user,
-                issue_date__year=current_year,
-                is_correction=True
-            ).count(),
-
-            'contractors_count': Contractor.objects.filter(user=request.user).count(),
-
-            'avg_invoice_value': 0,
-        }
-
-        if year_stats['invoices_count'] > 0:
-            year_stats['avg_invoice_value'] = year_stats['total_revenue'] / year_stats['invoices_count']
-
-        # Składki ZUS w bieżącym roku
-        zus_year_stats = MonthlySettlement.objects.filter(
-            user=request.user,
-            year=current_year
-        ).aggregate(
-            total_social=Sum('social_insurance_paid'),
-            total_health=Sum('health_insurance_paid'),
-            total_labor=Sum('labor_fund_paid'),
-            total_tax=Sum('income_tax_payable')
-        )
-
-        year_stats.update({
-            'total_social_insurance': zus_year_stats['total_social'] or 0,
-            'total_health_insurance': zus_year_stats['total_health'] or 0,
-            'total_labor_fund': zus_year_stats['total_labor'] or 0,
-            'total_tax_paid': zus_year_stats['total_tax'] or 0,
-        })
-
-        context['year_stats'] = year_stats
-
-        # 4. Ostatnie faktury
+        # Ostatnie faktury
         recent_invoices = Invoice.objects.filter(
             user=request.user
         ).order_by('-issue_date')[:5]
         context['recent_invoices'] = recent_invoices
 
-        # 5. Miesięczne rozliczenia do sprawdzenia
+        # Miesięczne rozliczenia do sprawdzenia
         pending_settlements = []
         for month in range(1, 13):
             if not MonthlySettlement.objects.filter(
                 user=request.user, year=current_year, month=month
             ).exists():
-                if month <= datetime.now().month:  # Tylko przeszłe i bieżący miesiąc
+                if month <= datetime.now().month:
                     pending_settlements.append(month)
 
         context['pending_settlements'] = pending_settlements
 
-        return render(request, 'admin/dashboard.html', context)
+        # === TERMINY I PRZYPOMNIENIA ===
+        today = datetime.now()
+        reminders = []
 
-    # Dodaj URL do get_urls() w MonthlySettlementAdmin
+        # Sprawdź czy zbliża się koniec roku
+        if today.month == 12:
+            reminders.append({
+                'type': 'warning',
+                'icon': 'fas fa-calendar-alt',
+                'title': 'Zbliża się koniec roku podatkowego',
+                'message': 'Pamiętaj o przygotowaniu rozliczenia rocznego do 31 stycznia.',
+                'action_url': 'admin:ksiegowosc_yearlysettlement_calculate',
+                'action_text': 'Sprawdź rozliczenie'
+            })
+
+        # Sprawdź czy brakuje rozliczenia za poprzedni rok
+        if today.month <= 3:  # Do marca
+            if not YearlySettlement.objects.filter(user=request.user, year=previous_year).exists():
+                reminders.append({
+                    'type': 'danger',
+                    'icon': 'fas fa-exclamation-triangle',
+                    'title': f'Brak rozliczenia rocznego za {previous_year}',
+                    'message': f'Termin składania rozliczenia rocznego za {previous_year} mija 31 stycznia {current_year}.',
+                    'action_url': 'admin:ksiegowosc_yearlysettlement_calculate',
+                    'action_text': 'Oblicz teraz'
+                })
+
+        # Sprawdź dużą różnicę w prognozowanym rozliczeniu
+        if abs(projected_difference) > 1000:
+            if projected_difference > 0:
+                reminders.append({
+                    'type': 'warning',
+                    'icon': 'fas fa-money-bill-wave',
+                    'title': 'Prognozowana dopłata podatku',
+                    'message': f'Na koniec roku możesz mieć dopłatę około {projected_difference:.0f} PLN.',
+                    'action_url': 'admin:ksiegowosc_monthlysettlement_calculate',
+                    'action_text': 'Sprawdź rozliczenia'
+                })
+            else:
+                reminders.append({
+                    'type': 'success',
+                    'icon': 'fas fa-coins',
+                    'title': 'Prognozowany zwrot podatku',
+                    'message': f'Na koniec roku możesz mieć zwrot około {abs(projected_difference):.0f} PLN.',
+                    'action_url': 'admin:ksiegowosc_yearlysettlement_calculate',
+                    'action_text': 'Zobacz szczegóły'
+                })
+
+        context['reminders'] = reminders
+
+        return render(request, 'admin/enhanced_dashboard.html', context)
+
+
     def get_urls(self):
         urls = super().get_urls()
         my_urls = [
