@@ -246,13 +246,13 @@ W przypadku pytań lub problemów:
 
 ##  📝 Licencja
 
-Ten projekt jest udostępniony na licencji Creative Commons Uznanie autorstwa-Użycie niekomercyjne-Na tych samych warunkach 4.0 Międzynarodowe (CC BY-NC-SA 4.0).
+Ten projekt jest udostępniony na licencji Creative Commons (CC BY-NC-SA 4.0).
 
-Oznacza to, że możesz swobodnie:
+** Oznacza to, że możesz swobodnie: **
   - Kopiować i rozpowszechniać oprogramowanie w dowolnym medium i formacie
   - Adaptować, remiksować i tworzyć na podstawie tego oprogramowania.
 
-Pod następującymi warunkami:
+** Pod następującymi warunkami:**
  - Uznanie autorstwa (BY) — Musisz odpowiednio oznaczyć autorstwo, podać link do licencji i wskazać, czy dokonano zmian.
  - Użycie niekomercyjne (NC) — Nie możesz używać tego oprogramowania do celów komercyjnych.
  - Na tych samych warunkach (SA) — Jeśli remiksujesz, zmieniasz lub tworzysz na podstawie materiału, musisz rozpowszechniać swoje dzieła na tej samej licencji, co oryginał.
