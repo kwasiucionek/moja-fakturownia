@@ -23,7 +23,7 @@ env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
     SECRET_KEY=(str, ''),
-    
+
     # Security settings
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 31536000),
@@ -33,34 +33,34 @@ env = environ.Env(
     SECURE_BROWSER_XSS_FILTER=(bool, True),
     SECURE_REFERRER_POLICY=(str, 'strict-origin-when-cross-origin'),
     SECURE_PROXY_SSL_HEADER=(bool, True),
-    
+
     # Cookies
     SESSION_COOKIE_SECURE=(bool, True),
     CSRF_COOKIE_SECURE=(bool, True),
     SESSION_COOKIE_AGE=(int, 28800),
     CSRF_TRUSTED_ORIGINS=(list, []),
-    
+
     # Database
     DB_SSLMODE=(str, 'require'),
     DB_CONN_MAX_AGE=(int, 600),
     DB_CONN_HEALTH_CHECKS=(bool, True),
-    
+
     # Email
     EMAIL_PORT=(int, 587),
     EMAIL_USE_TLS=(bool, True),
     EMAIL_USE_SSL=(bool, False),
     EMAIL_TIMEOUT=(int, 30),
-    
+
     # Cache
     CACHE_KEY_PREFIX=(str, 'fakturownia_prod'),
     CACHE_TIMEOUT=(int, 300),
-    
+
     # Files
     FILE_UPLOAD_MAX_MEMORY_SIZE=(int, 5242880),  # 5MB
     DATA_UPLOAD_MAX_MEMORY_SIZE=(int, 5242880),  # 5MB
     DATA_UPLOAD_MAX_NUMBER_FIELDS=(int, 100),
     WHITENOISE_MAX_AGE=(int, 31536000),
-    
+
     # Security
     RATELIMIT_ENABLE=(bool, True),
     SECURITY_MAX_REQUESTS_PER_MINUTE=(int, 60),
@@ -68,11 +68,11 @@ env = environ.Env(
     SECURITY_BLOCK_DURATION=(int, 300),
     SECURITY_IP_WHITELIST=(list, ['127.0.0.1', '::1']),
     SECURITY_MAX_CONTENT_LENGTH=(int, 10485760),  # 10MB
-    
+
     # Admin
     ADMIN_URL=(str, 'admin/'),
     ADMIN_IP_WHITELIST=(list, []),
-    
+
     # Auth
     ACCOUNT_EMAIL_VERIFICATION=(str, 'mandatory'),
     ACCOUNT_EMAIL_REQUIRED=(bool, True),
@@ -80,38 +80,38 @@ env = environ.Env(
     ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT=(int, 300),
     ACCOUNT_PASSWORD_MIN_LENGTH=(int, 14),
     AUTH_PASSWORD_MIN_LENGTH=(int, 14),
-    
+
     # CORS
     CORS_ALLOWED_ORIGINS=(list, []),
     CORS_ALLOW_CREDENTIALS=(bool, False),
-    
+
     # Logging
     LOG_LEVEL=(str, 'WARNING'),
-    
+
     # Monitoring
     SENTRY_ENVIRONMENT=(str, 'production'),
     SENTRY_TRACES_SAMPLE_RATE=(float, 0.1),
     SENTRY_PROFILES_SAMPLE_RATE=(float, 0.1),
-    
+
     # Health Check
     HEALTH_CHECK_DISK_USAGE_MAX=(int, 90),
     HEALTH_CHECK_MEMORY_MIN=(int, 100),
-    
+
     # App specific
     INVOICE_NUMBER_FORMAT=(str, 'F/{id}/{month}/{year}'),
     DEFAULT_PAYMENT_DAYS=(int, 14),
     MAX_INVOICE_PDF_SIZE=(int, 10),
-    
+
     # Localization
     LANGUAGE_CODE=(str, 'pl'),
     TIME_ZONE=(str, 'Europe/Warsaw'),
-    
+
     # Additional
     ENVIRONMENT=(str, 'production'),
     VERSION=(str, '1.0.0'),
     ENABLE_API=(bool, False),
     USE_GOOGLE_FONTS_CDN=(bool, False),
-    
+
     # CSP
     CSP_DEFAULT_SRC=(list, ["'self'"]),
     CSP_SCRIPT_SRC=(list, ["'self'", "'unsafe-inline'"]),
@@ -214,6 +214,10 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'ksiegowosc.middleware.security.SecurityMiddleware',
+    'ksiegowosc.middleware.security.LoginSecurityMiddleware',
+    'ksiegowosc.middleware.security.AdminSecurityMiddleware',
+    'ksiegowosc.middleware.security.ContentSecurityPolicyMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     *(['debug_toolbar.middleware.DebugToolbarMiddleware'] if DEBUG else []),
@@ -222,7 +226,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    
+
     # Custom security middleware (add if you created them)
     # 'ksiegowosc.middleware.security.SecurityMiddleware',
     # 'ksiegowosc.middleware.security.LoginSecurityMiddleware',
@@ -504,7 +508,7 @@ if SENTRY_DSN and not DEBUG:
     import sentry_sdk
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
-    
+
     sentry_logging = LoggingIntegration(
         level=logging.INFO,
         event_level=logging.ERROR
@@ -578,7 +582,7 @@ JAZZMIN_SETTINGS = {
 
     "custom_links": {
         "ksiegowosc": [{
-            "name": "Dashboard z wykresami", 
+            "name": "Dashboard z wykresami",
             "url": "admin:ksiegowosc_dashboard",
             "icon": "fas fa-chart-pie",
             "permissions": ["ksiegowosc.view_monthlysettlement"]
@@ -703,14 +707,14 @@ if DEBUG:
     SECURE_HSTS_SECONDS = 0
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SECURE = False
-    
+
     # Email in console
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-    
+
     # Development tools
     SHELL_PLUS_PRINT_SQL = True
     INTERNAL_IPS = ['127.0.0.1', 'localhost']
-    
+
     # Relaxed rate limiting
     RATELIMIT_ENABLE = False
 
@@ -722,11 +726,11 @@ if DEBUG:
 if not DEBUG:
     required_settings = ['SECRET_KEY', 'ALLOWED_HOSTS']
     missing_settings = []
-    
+
     for setting in required_settings:
         if not locals().get(setting):
             missing_settings.append(setting)
-    
+
     if missing_settings:
         raise ValueError(f"Missing required settings in production: {missing_settings}")
 
