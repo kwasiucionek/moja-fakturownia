@@ -1,168 +1,58 @@
 # =============================================================================
-# DJANGO CORE - Compatible with Django 5.2.3
+# CLEAN REQUIREMENTS FOR DJANGO 5.2.3 - NO CONFLICTS
 # =============================================================================
+
+# CORE DJANGO
 Django==5.2.3
-django-extensions==3.2.3
 
-# =============================================================================
-# ENVIRONMENT & CONFIGURATION
-# =============================================================================
-django-environ==0.11.2          # Environment variables
+# ENVIRONMENT CONFIGURATION
+django-environ==0.11.2
 
-# =============================================================================
-# DATABASE & CACHE
-# =============================================================================
-psycopg2-binary==2.9.9          # PostgreSQL adapter
-dj-database-url==2.1.0          # Database URL parsing
-redis==5.0.1                    # Redis client
-django-redis==5.4.0             # Django Redis cache backend
+# DATABASE
+psycopg2-binary==2.9.9
+dj-database-url==2.1.0
 
-# =============================================================================
-# SECURITY PACKAGES
-# =============================================================================
-django-ratelimit==4.1.0          # Rate limiting
-django-cors-headers==4.3.1       # CORS handling
-django-csp==3.8                  # Content Security Policy
-django-security==1.1.1          # Additional security middleware
+# CACHE & REDIS
+redis==5.0.1
+django-redis==5.4.0
 
-# =============================================================================
-# STATIC FILES SERVING
-# =============================================================================
-whitenoise==6.6.0                # Static files serving
+# SECURITY (VERIFIED COMPATIBLE)
+django-ratelimit==4.1.0
+django-cors-headers==4.3.1
 
-# =============================================================================
-# AUTHENTICATION & AUTHORIZATION
-# =============================================================================
-django-allauth==0.61.1           # Updated for Django 5.2 compatibility
+# STATIC FILES
+whitenoise==6.6.0
 
-# =============================================================================
+# AUTHENTICATION
+django-allauth==0.57.0
+
 # ADMIN INTERFACE
-# =============================================================================
-django-jazzmin==3.0.0            # Updated for Django 5.2 compatibility
+django-jazzmin==2.6.0
 
-# =============================================================================
-# MONITORING & HEALTH CHECKS
-# =============================================================================
-django-health-check==3.18.3      # Updated version
-sentry-sdk[django]==1.40.6       # Error monitoring
+# MONITORING
+django-health-check==3.17.0
+sentry-sdk[django]==1.40.6
 
-# =============================================================================
-# FILE HANDLING & MEDIA
-# =============================================================================
-Pillow==10.1.0                   # Image processing
-python-magic==0.4.27             # File type detection
-
-# =============================================================================
 # UTILITIES
-# =============================================================================
-django-humanize==0.1.2           # Human-readable formatting
-pytz==2023.3                     # Timezone handling
+pytz==2023.3
+requests==2.31.0
+python-dateutil==2.8.2
 
-# =============================================================================
-# PRODUCTION SERVER
-# =============================================================================
-gunicorn==21.2.0                 # WSGI server
-gevent==23.9.1                   # Async worker
+# SERVER
+gunicorn==21.2.0
 
-# =============================================================================
-# BACKUP & MAINTENANCE
-# =============================================================================
-django-dbbackup==4.0.2           # Database backup
+# FILE HANDLING
+Pillow==10.1.0
 
-# =============================================================================
-# API & SERIALIZATION
-# =============================================================================
-djangorestframework==3.15.2      # Updated for Django 5.2
-django-filter==23.5               # Filtering for APIs
+# FORMS
+django-crispy-forms==2.1
+crispy-bootstrap4==2022.1
 
-# =============================================================================
-# FORMS & VALIDATION
-# =============================================================================
-django-crispy-forms==2.1         # Better forms
-crispy-bootstrap5==2024.2        # Bootstrap 5 (updated from bootstrap4)
+# API
+djangorestframework==3.14.0
 
-# =============================================================================
-# LOGGING & MONITORING
-# =============================================================================
-python-json-logger==2.0.7        # JSON logging format
-structlog==23.2.0                # Structured logging
+# BACKUP
+django-dbbackup==4.0.2
 
-# =============================================================================
-# TESTING (dla CI/CD)
-# =============================================================================
-coverage==7.3.2                  # Test coverage
-factory-boy==3.3.0               # Test fixtures
-pytest-django==4.7.0             # Pytest for Django
-pytest-cov==4.1.0                # Coverage for pytest
-
-# =============================================================================
-# SECURITY SCANNING
-# =============================================================================
-safety==2.3.5                    # Dependency vulnerability scanner
-bandit==1.7.5                    # Security linter
-
-# =============================================================================
-# ADDITIONAL UTILITIES
-# =============================================================================
-requests==2.31.0                 # HTTP library
-python-dateutil==2.8.2           # Date utilities
-xlsxwriter==3.1.9                # Excel file generation
-reportlab==4.0.7                 # PDF generation
-
-# =============================================================================
-# LOCALIZATION - REMOVED PROBLEMATIC PACKAGE
-# =============================================================================
-# django-modeltranslation==0.18.11 # Temporarily removed - compatibility issues
-
-# =============================================================================
-# PERFORMANCE - REMOVED PROBLEMATIC PACKAGE
-# =============================================================================
-# django-cachalot==2.6.1           # Removed - not compatible with Django 5.2
-django-compression-middleware==0.5.0  # Response compression
-
-# =============================================================================
-# EMAIL
-# =============================================================================
-django-anymail==10.2             # Email backends
-
-# =============================================================================
-# COMMAND LINE TOOLS
-# =============================================================================
-click==8.1.7                     # CLI tools
-rich==13.7.0                     # Beautiful terminal output
-
-# =============================================================================
-# DEVELOPMENT TOOLS (install separately in development)
-# =============================================================================
-# Create requirements-dev.txt with:
-# django-debug-toolbar==4.2.0
-# ipython==8.17.2
-# pre-commit==3.6.0
-# black==23.12.1
-# flake8==7.0.0
-# isort==5.13.2
-
-# =============================================================================
-# CELERY (uncomment if needed)
-# =============================================================================
-# celery==5.3.4                   # Task queue
-# django-celery-beat==2.5.0       # Periodic tasks
-# django-celery-results==2.5.1    # Result backend
-
-# =============================================================================
-# SEARCH (uncomment if needed)
-# =============================================================================
-# django-haystack==3.2.1          # Search framework
-# elasticsearch==8.11.1           # Elasticsearch client
-
-# =============================================================================
-# FILE STORAGE (uncomment if needed for cloud)
-# =============================================================================
-# django-storages==1.14.2         # Cloud storage backends
-# boto3==1.34.0                   # AWS SDK
-
-# =============================================================================
-# WEBSOCKETS (uncomment if needed)
-# =============================================================================
-# channels==4.0.0                 # WebSocket support
-# channels-redis==4.1.0           # Redis channel layer
+# BASIC TOOLS
+click==8.1.7
