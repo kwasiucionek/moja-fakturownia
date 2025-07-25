@@ -22,26 +22,26 @@
 .reminder-success { background-color: #d4edda; border-left: 4px solid #28a745; }
 .year-summary { background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%); color: white; }
 .payment-summary { background: linear-gradient(135deg, #00b894 0%, #00a085 100%); color: white; }
-.info-box { 
-    background: #fff; 
-    border-radius: 8px; 
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-    margin-bottom: 20px; 
+.info-box {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
     display: flex;
     align-items: center;
 }
-.info-box-icon { 
-    width: 60px; 
-    height: 60px; 
-    line-height: 60px; 
-    text-align: center; 
-    color: white; 
-    font-size: 24px; 
-    border-radius: 8px 0 0 8px; 
+.info-box-icon {
+    width: 60px;
+    height: 60px;
+    line-height: 60px;
+    text-align: center;
+    color: white;
+    font-size: 24px;
+    border-radius: 8px 0 0 8px;
     flex-shrink: 0;
 }
-.info-box-content { 
-    padding: 15px; 
+.info-box-content {
+    padding: 15px;
     flex-grow: 1;
 }
 .info-box-number {
@@ -74,8 +74,7 @@
 
     <section class="content">
         <div class="container-fluid">
-            
-            <!-- PROGRES ROKU PODATKOWEGO -->
+
             <div class="row">
                 <div class="col-12">
                     <div class="card year-summary">
@@ -93,7 +92,7 @@
                                             <span>{{ year_progress.days_passed }}/{{ year_progress.days_total }} dni</span>
                                         </div>
                                         <div class="progress" style="height: 20px;">
-                                            <div class="progress-bar bg-success" role="progressbar" 
+                                            <div class="progress-bar bg-success" role="progressbar"
                                                  style="width: {{ year_progress.percentage }}%">
                                                 {{ year_progress.percentage }}%
                                             </div>
@@ -110,7 +109,7 @@
                                         <strong>Prognoza na koniec {{ current_year }}:</strong><br>
                                         Przewidywany przychód: <strong>{{ year_progress.projected_end_year_revenue|floatformat:0 }} PLN</strong><br>
                                         Przewidywany podatek: <strong>{{ year_progress.projected_end_year_tax|floatformat:0 }} PLN</strong><br>
-                                        
+
                                         <div class="mt-2">
                                             {% if current_year_summary.projected_difference > 0 %}
                                                 <span class="badge badge-warning">Prognozowana dopłata: {{ current_year_summary.projected_difference|floatformat:0 }} PLN</span>
@@ -128,7 +127,6 @@
                 </div>
             </div>
 
-            <!-- PORÓWNANIE Z POPRZEDNIM ROKIEM -->
             {% if previous_year_data.total_revenue > 0 %}
             <div class="row">
                 <div class="col-md-6">
@@ -186,12 +184,12 @@
                             <h3>{{ current_year_summary.projected_yearly_tax|floatformat:0 }} PLN</h3>
                             <div class="mt-3">
                                 {% if current_yearly_settlement %}
-                                    <a href="{% url 'admin:ksiegowosc_yearlysettlement_view' current_yearly_settlement.pk %}" 
+                                    <a href="{% url 'admin:ksiegowosc_yearlysettlement_view' current_yearly_settlement.pk %}"
                                        class="btn btn-light btn-sm">
                                         <i class="fas fa-eye"></i> Zobacz rozliczenie
                                     </a>
                                 {% else %}
-                                    <a href="{% url 'admin:ksiegowosc_yearlysettlement_calculate' %}" 
+                                    <a href="{% url 'admin:ksiegowosc_yearlysettlement_calculate' %}"
                                        class="btn btn-light btn-sm">
                                         <i class="fas fa-calculator"></i> Oblicz rozliczenie
                                     </a>
@@ -203,7 +201,6 @@
             </div>
             {% endif %}
 
-            <!-- STATYSTYKI PŁATNOŚCI -->
             {% if payment_stats %}
             <div class="row">
                 <div class="col-12">
@@ -238,8 +235,7 @@
                                     </h3>
                                 </div>
                             </div>
-                            
-                            <!-- Pasek postępu płatności -->
+
                             <div class="mt-3">
                                 <div class="d-flex justify-content-between small text-white-50 mb-1">
                                     <span>Postęp płatności</span>
@@ -252,7 +248,7 @@
                                     </span>
                                 </div>
                                 <div class="progress">
-                                    <div class="progress-bar bg-light" role="progressbar" 
+                                    <div class="progress-bar bg-light" role="progressbar"
                                          style="width: {% if payment_stats.total_outstanding > 0 %}{{ payment_stats.total_paid|div:payment_stats.total_outstanding|mul:100 }}{% else %}100{% endif %}%">
                                     </div>
                                 </div>
@@ -263,7 +259,6 @@
             </div>
             {% endif %}
 
-            <!-- PRZYPOMNIENIA I TERMINY -->
             {% if reminders %}
             <div class="row">
                 <div class="col-12">
@@ -295,7 +290,6 @@
             </div>
             {% endif %}
 
-            <!-- PRZETERMINOWANE PŁATNOŚCI - ALERT -->
             {% if payment_stats.overdue_count > 0 %}
             <div class="row">
                 <div class="col-12">
@@ -313,7 +307,6 @@
             </div>
             {% endif %}
 
-            <!-- STATYSTYKI INFO BOXES -->
             <div class="row">
                 <div class="col-lg-3 col-6">
                     <div class="info-box">
@@ -362,7 +355,6 @@
                 </div>
             </div>
 
-            <!-- DODATKOWE STATYSTYKI PŁATNOŚCI -->
             {% if payment_stats %}
             <div class="row">
                 <div class="col-lg-3 col-6">
@@ -413,9 +405,7 @@
             </div>
             {% endif %}
 
-            <!-- WYKRESY -->
             <div class="row">
-                <!-- Wykres podstawy opodatkowania -->
                 <div class="col-md-6">
                     <div class="card dashboard-card">
                         <div class="card-header">
@@ -431,7 +421,6 @@
                     </div>
                 </div>
 
-                <!-- Wykres porównania lat -->
                 <div class="col-md-6">
                     <div class="card dashboard-card">
                         <div class="card-header">
@@ -448,7 +437,6 @@
                 </div>
             </div>
 
-            <!-- WYKRES PŁATNOŚCI VS FAKTURY -->
             {% if payments_chart %}
             <div class="row">
                 <div class="col-md-6">
@@ -465,7 +453,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="col-md-6">
                     <div class="card dashboard-card">
                         <div class="card-header">
@@ -483,7 +471,6 @@
             </div>
             {% endif %}
 
-            <!-- WYKRES PRZYCHODÓW I OSTATNIE FAKTURY -->
             <div class="row">
                 <div class="col-md-8">
                     <div class="card dashboard-card">
@@ -529,13 +516,13 @@
                         <div class="card-footer">
                             <div class="row">
                                 <div class="col-6">
-                                    <a href="{% url 'admin:ksiegowosc_invoice_changelist' %}" 
+                                    <a href="{% url 'admin:ksiegowosc_invoice_changelist' %}"
                                        class="btn btn-primary btn-sm btn-block">
                                         <i class="fas fa-list"></i> Wszystkie
                                     </a>
                                 </div>
                                 <div class="col-6">
-                                    <a href="{% url 'admin:ksiegowosc_invoice_add' %}" 
+                                    <a href="{% url 'admin:ksiegowosc_invoice_add' %}"
                                        class="btn btn-success btn-sm btn-block">
                                         <i class="fas fa-plus"></i> Nowa
                                     </a>
@@ -544,7 +531,6 @@
                         </div>
                     </div>
 
-                    <!-- SZYBKIE AKCJE ROZLICZENIA -->
                     <div class="card">
                         <div class="card-header">
                             <h5 class="card-title">
@@ -557,18 +543,18 @@
                                     <small><strong>Brakuje {{ pending_settlements|length }} rozliczeń miesięcznych</strong></small>
                                 </div>
                             {% endif %}
-                            
+
                             <div class="btn-group-vertical d-block">
-                                <a href="{% url 'admin:ksiegowosc_monthlysettlement_calculate' %}" 
+                                <a href="{% url 'admin:ksiegowosc_monthlysettlement_calculate' %}"
                                    class="btn btn-info btn-sm mb-2">
                                     <i class="fas fa-calculator"></i> Nowe rozliczenie miesięczne
                                 </a>
-                                <a href="{% url 'admin:ksiegowosc_yearlysettlement_calculate' %}" 
+                                <a href="{% url 'admin:ksiegowosc_yearlysettlement_calculate' %}"
                                    class="btn btn-primary btn-sm mb-2">
                                     <i class="fas fa-calendar-alt"></i> Rozliczenie roczne {{ current_year }}
                                 </a>
                                 {% if current_yearly_settlement %}
-                                <a href="{% url 'admin:ksiegowosc_yearlysettlement_pdf' current_yearly_settlement.pk %}" 
+                                <a href="{% url 'admin:ksiegowosc_yearlysettlement_pdf' current_yearly_settlement.pk %}"
                                    class="btn btn-success btn-sm" target="_blank">
                                     <i class="fas fa-file-pdf"></i> PDF {{ current_year }}
                                 </a>
@@ -577,7 +563,6 @@
                         </div>
                     </div>
 
-                    <!-- SZYBKIE AKCJE PŁATNOŚCI -->
                     {% if payment_stats %}
                     <div class="card">
                         <div class="card-header">
@@ -591,32 +576,31 @@
                                     <small><strong>{{ payment_stats.overdue_count }} przeterminowanych płatności</strong></small>
                                 </div>
                             {% endif %}
-                            
+
                             <div class="btn-group-vertical d-block">
-                                <a href="{% url 'admin:ksiegowosc_payment_add' %}" 
+                                <a href="{% url 'admin:ksiegowosc_payment_add' %}"
                                    class="btn btn-success btn-sm mb-2">
                                     <i class="fas fa-plus"></i> Dodaj płatność
                                 </a>
-                                <a href="{% url 'admin:ksiegowosc_invoice_payments_report' %}" 
+                                <a href="{% url 'admin:ksiegowosc_invoice_payments_report' %}"
                                    class="btn btn-info btn-sm mb-2">
                                     <i class="fas fa-chart-bar"></i> Raport płatności
                                 </a>
-                                <a href="{% url 'admin:ksiegowosc_invoice_overdue_report' %}" 
+                                <a href="{% url 'admin:ksiegowosc_invoice_overdue_report' %}"
                                    class="btn btn-warning btn-sm">
                                     <i class="fas fa-clock"></i> Przeterminowane
                                 </a>
                             </div>
-                            
-                            <!-- Mini wykres płatności -->
+
                             <div class="mt-3">
                                 <small class="text-muted">
                                     <strong>Płatności vs Należności:</strong><br>
                                     Zapłacone: {{ payment_stats.total_paid|floatformat:0 }} PLN<br>
                                     Do zapłaty: {{ payment_stats.balance_due|floatformat:0 }} PLN
                                 </small>
-                                
+
                                 <div class="progress mt-2" style="height: 10px;">
-                                    <div class="progress-bar bg-success" role="progressbar" 
+                                    <div class="progress-bar bg-success" role="progressbar"
                                          style="width: {% if payment_stats.total_outstanding > 0 %}{{ payment_stats.total_paid|div:payment_stats.total_outstanding|mul:100 }}{% else %}0{% endif %}%">
                                     </div>
                                 </div>
@@ -794,7 +778,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 backgroundColor: [
                     '#28a745', // zielony - opłacone
                     '#ffc107', // żółty - częściowo
-                    '#dc3545', // czerwony - przeterminowane  
+                    '#dc3545', // czerwony - przeterminowane
                     '#6c757d'  // szary - nieopłacone
                 ],
                 borderColor: '#ffffff',

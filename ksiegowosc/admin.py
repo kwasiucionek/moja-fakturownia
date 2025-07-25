@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from weasyprint import HTML
-from .models import CompanyInfo, Contractor, Invoice, InvoiceItem, MonthlySettlement, YearlySettlement, ZUSRates, Payment
+from .models import CompanyInfo, Contractor, Invoice, InvoiceItem, MonthlySettlement, YearlySettlement, ZUSRates, Payment, PurchaseInvoice, PurchaseInvoiceItem, ExpenseCategory
 from django.contrib import messages
 from django.db.models import Sum, Min, Max, Count, Q, F
 from django.db.models.functions import TruncMonth
@@ -37,30 +37,28 @@ class PaymentStatusFilter(admin.SimpleListFilter):
 
         if self.value() == 'paid':
             # Faktury w pełni opłacone
-            return queryset.filter(
-                payments__amount__gte=F('total_amount')
+            return queryset.annotate(paid_sum=Sum('payments__amount')).filter(
+                paid_sum__gte=F('total_amount')
             ).distinct()
 
         elif self.value() == 'partial':
             # Faktury częściowo opłacone
-            return queryset.filter(
-                payments__amount__gt=0,
-                payments__amount__lt=F('total_amount')
+            return queryset.annotate(paid_sum=Sum('payments__amount')).filter(
+                paid_sum__gt=0,
+                paid_sum__lt=F('total_amount')
             ).distinct()
 
         elif self.value() == 'overdue':
             # Faktury przeterminowane (termin minął i nie są w pełni opłacone)
             return queryset.filter(
                 payment_date__lt=today
-            ).exclude(
-                payments__amount__gte=F('total_amount')
+            ).annotate(paid_sum=Sum('payments__amount')).exclude(
+                paid_sum__gte=F('total_amount')
             ).distinct()
 
         elif self.value() == 'unpaid':
             # Faktury nieopłacone (brak płatności)
-            return queryset.exclude(
-                payments__amount__gt=0
-            ).distinct()
+            return queryset.filter(payments__isnull=True).distinct()
 
         return queryset
 
@@ -387,15 +385,15 @@ class InvoiceAdmin(admin.ModelAdmin):
         stats = {
             'total_invoices': Invoice.objects.filter(user=request.user).count(),
 
-            'paid_invoices': Invoice.objects.filter(user=request.user).filter(
-                payments__amount__gte=F('total_amount')
-            ).distinct().count(),
+            'paid_invoices': Invoice.objects.filter(user=request.user).annotate(
+                paid_sum=Sum('payments__amount')
+            ).filter(paid_sum__gte=F('total_amount')).distinct().count(),
 
             'overdue_invoices': Invoice.objects.filter(
                 user=request.user,
                 payment_date__lt=today
-            ).exclude(
-                payments__amount__gte=F('total_amount')
+            ).annotate(paid_sum=Sum('payments__amount')).exclude(
+                paid_sum__gte=F('total_amount')
             ).count(),
 
             'total_outstanding': Invoice.objects.filter(user=request.user).aggregate(
@@ -421,8 +419,8 @@ class InvoiceAdmin(admin.ModelAdmin):
         overdue_invoices = Invoice.objects.filter(
             user=request.user,
             payment_date__lt=today
-        ).exclude(
-            payments__amount__gte=F('total_amount')
+        ).annotate(paid_sum=Sum('payments__amount')).exclude(
+            paid_sum__gte=F('total_amount')
         ).select_related('contractor')[:10]
 
         context = {
@@ -442,8 +440,8 @@ class InvoiceAdmin(admin.ModelAdmin):
         overdue_invoices = Invoice.objects.filter(
             user=request.user,
             payment_date__lt=today
-        ).exclude(
-            payments__amount__gte=F('total_amount')
+        ).annotate(paid_sum=Sum('payments__amount')).exclude(
+            paid_sum__gte=F('total_amount')
         ).select_related('contractor').order_by('payment_date')
 
         # Grupuj po okresach przeterminowania
@@ -839,6 +837,10 @@ class InvoiceAdmin(admin.ModelAdmin):
 class MonthlySettlementAdmin(admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/monthlysettlement/change_list.html"
     list_display = ('year', 'month', 'total_revenue', 'income_tax_payable', 'user')
+    list_filter = ('year', 'month', 'user')
+    search_fields = ('year', 'month')
+    readonly_fields = ('created_at',)
+    exclude = ('user',)
 
     def get_urls(self):
         urls = super().get_urls()
@@ -933,8 +935,8 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
             'overdue_count': Invoice.objects.filter(
                 user=request.user,
                 payment_date__lt=today
-            ).exclude(
-                payments__amount__gte=F('total_amount')
+            ).annotate(paid_sum=Sum('payments__amount')).exclude(
+                paid_sum__gte=F('total_amount')
             ).count(),
         }
 
@@ -1071,25 +1073,22 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
 
         # === STATYSTYKI STATUSÓW PŁATNOŚCI ===
         payment_status_stats = {
-            'paid': Invoice.objects.filter(user=request.user).filter(
-                payments__amount__gte=F('total_amount')
-            ).distinct().count(),
+            'paid': Invoice.objects.filter(user=request.user).annotate(
+                paid_sum=Sum('payments__amount')
+            ).filter(paid_sum__gte=F('total_amount')).distinct().count(),
 
-            'partial': Invoice.objects.filter(user=request.user).filter(
-                payments__amount__gt=0,
-                payments__amount__lt=F('total_amount')
-            ).distinct().count(),
+            'partial': Invoice.objects.filter(user=request.user).annotate(
+                paid_sum=Sum('payments__amount')
+            ).filter(paid_sum__gt=0, paid_sum__lt=F('total_amount')).distinct().count(),
 
             'overdue': Invoice.objects.filter(
                 user=request.user,
                 payment_date__lt=today
-            ).exclude(
-                payments__amount__gte=F('total_amount')
+            ).annotate(paid_sum=Sum('payments__amount')).exclude(
+                paid_sum__gte=F('total_amount')
             ).count(),
 
-            'unpaid': Invoice.objects.filter(user=request.user).exclude(
-                payments__amount__gt=0
-            ).count(),
+            'unpaid': Invoice.objects.filter(user=request.user).filter(payments__isnull=True).count(),
         }
 
         # Ostatnie faktury
@@ -1502,3 +1501,61 @@ class ZUSRatesAdmin(admin.ModelAdmin):
                 messages.error(request, f"Błąd aktualizacji: {str(e)}")
 
         return redirect('admin:ksiegowosc_zusrates_changelist')
+
+
+# ==== PURCHASE INVOICE ADMIN ====
+
+@admin.register(PurchaseInvoice)
+class PurchaseInvoiceAdmin(admin.ModelAdmin):
+    list_display = ('invoice_number', 'supplier', 'issue_date', 'total_amount', 'category', 'payment_status_colored', 'user')
+    list_filter = ('category', 'is_paid', 'issue_date', 'supplier', 'user')
+    search_fields = ('invoice_number', 'supplier__name', 'description')
+    readonly_fields = ('created_at', 'updated_at')
+    exclude = ('user',)
+    autocomplete_fields = ['supplier']
+
+    def payment_status_colored(self, obj):
+        status = obj.payment_status
+        colors = {
+            'paid': 'green',
+            'overdue': 'red',
+            'pending': 'orange',
+        }
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            colors.get(status, 'black'),
+            obj.payment_status_display
+        )
+    payment_status_colored.short_description = 'Status płatności'
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, 'user') or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
+
+
+# ==== EXPENSE CATEGORY ADMIN ====
+
+@admin.register(ExpenseCategory)
+class ExpenseCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'is_active', 'user')
+    list_filter = ('is_active', 'user')
+    search_fields = ('name', 'code')
+    exclude = ('user',)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, 'user') or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
