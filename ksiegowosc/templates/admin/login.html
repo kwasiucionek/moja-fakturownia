@@ -1,0 +1,13 @@
+{% extends "admin/login.html" %}
+{% load socialaccount %}
+
+{% block content %}
+    {{ block.super }}
+
+    <div style="text-align: center; margin-top: 20px;">
+        <h4>Lub zaloguj się przez:</h4>
+        <a href="{% provider_login_url 'google' %}" class="btn btn-primary" style="background-color: #DB4437; border-color: #DB4437;">
+            <i class="fab fa-google"></i> Zaloguj się z Google
+        </a>
+    </div>
+{% endblock %}
