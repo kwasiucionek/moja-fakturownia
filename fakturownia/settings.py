@@ -154,6 +154,9 @@ JAZZMIN_SETTINGS = {
         "ksiegowosc.monthlysettlement": "fas fa-calculator",
         "ksiegowosc.yearlysettlement": "fas fa-calendar-alt",
         "ksiegowosc.zusrates": "fas fa-coins",
+        "ksiegowosc.payment": "fas fa-money-bill-wave",
+        "ksiegowosc.purchaseinvoice": "fas fa-shopping-cart",
+        "ksiegowosc.expensecategory": "fas fa-tags",
     },
 
     # Ulepszenia interfejsu
