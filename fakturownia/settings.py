@@ -113,11 +113,7 @@ env = environ.Env(
     USE_GOOGLE_FONTS_CDN=(bool, False),
     
     # CSP
-    CSP_DEFAULT_SRC=(list, ["'self'"]),
-    CSP_SCRIPT_SRC=(list, ["'self'", "'unsafe-inline'"]),
-    CSP_STYLE_SRC=(list, ["'self'", "'unsafe-inline'", "fonts.googleapis.com"]),
-    CSP_FONT_SRC=(list, ["'self'", "fonts.gstatic.com"]),
-    CSP_IMG_SRC=(list, ["'self'", "data:"]),
+    CSP_ENABLED=(bool, True),
 )
 
 # Read .env file
@@ -168,7 +164,7 @@ SESSION_COOKIE_AGE = env('SESSION_COOKIE_AGE')
 # CSRF additional security
 CSRF_COOKIE_NAME = env.str('CSRF_COOKIE_NAME', default='csrftoken')
 CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
-CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS')
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 # =============================================================================
 # APPLICATION DEFINITION
@@ -219,6 +215,7 @@ MIDDLEWARE = [
     *(['debug_toolbar.middleware.DebugToolbarMiddleware'] if DEBUG else []),
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
+    'allauth.account.middleware.AccountMiddleware',  # DODANE - wymagane przez django-allauth
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -596,7 +593,7 @@ JAZZMIN_SETTINGS = {
 # CORS SETTINGS - RESTRICTED
 # =============================================================================
 
-CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
 CORS_ALLOW_CREDENTIALS = env('CORS_ALLOW_CREDENTIALS')
 CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
 
@@ -615,7 +612,7 @@ RATELIMIT_USE_CACHE = 'default'
 ADMIN_URL = env('ADMIN_URL')
 
 # Additional admin restrictions
-ADMIN_IP_WHITELIST = env('ADMIN_IP_WHITELIST')
+ADMIN_IP_WHITELIST = env.list('ADMIN_IP_WHITELIST', default=[])
 ADMIN_FORCE_ALLAUTH = env.bool('ADMIN_FORCE_ALLAUTH', default=True)
 
 # =============================================================================
@@ -649,6 +646,7 @@ AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
+# Required by allauth
 SITE_ID = 1
 
 # Allauth security settings
@@ -689,11 +687,12 @@ MAX_INVOICE_PDF_SIZE = env('MAX_INVOICE_PDF_SIZE')
 # CONTENT SECURITY POLICY
 # =============================================================================
 
-CSP_DEFAULT_SRC = env('CSP_DEFAULT_SRC')
-CSP_SCRIPT_SRC = env('CSP_SCRIPT_SRC')
-CSP_STYLE_SRC = env('CSP_STYLE_SRC')
-CSP_FONT_SRC = env('CSP_FONT_SRC')
-CSP_IMG_SRC = env('CSP_IMG_SRC')
+# CSP Settings - simplified
+CSP_DEFAULT_SRC = ["'self'"]
+CSP_SCRIPT_SRC = ["'self'", "'unsafe-inline'"]
+CSP_STYLE_SRC = ["'self'", "'unsafe-inline'", "fonts.googleapis.com"]
+CSP_FONT_SRC = ["'self'", "fonts.gstatic.com"]
+CSP_IMG_SRC = ["'self'", "data:"]
 
 # =============================================================================
 # DEVELOPMENT OVERRIDES
