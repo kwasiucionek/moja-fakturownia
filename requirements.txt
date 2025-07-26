@@ -1,0 +1,58 @@
+# =============================================================================
+# CLEAN REQUIREMENTS FOR DJANGO 5.2.3 - NO CONFLICTS
+# =============================================================================
+
+# CORE DJANGO
+Django==5.2.3
+
+# ENVIRONMENT CONFIGURATION
+django-environ==0.11.2
+
+# DATABASE
+psycopg2-binary==2.9.9
+dj-database-url==2.1.0
+
+# CACHE & REDIS
+redis==5.0.1
+django-redis==5.4.0
+
+# SECURITY (VERIFIED COMPATIBLE)
+django-ratelimit==4.1.0
+django-cors-headers==4.3.1
+
+# STATIC FILES
+whitenoise==6.6.0
+
+# AUTHENTICATION
+django-allauth==0.57.0
+
+# ADMIN INTERFACE
+django-jazzmin==2.6.0
+
+# MONITORING
+django-health-check==3.17.0
+sentry-sdk[django]==1.40.6
+
+# UTILITIES
+pytz==2023.3
+requests==2.31.0
+python-dateutil==2.8.2
+
+# SERVER
+gunicorn==21.2.0
+
+# FILE HANDLING
+Pillow==10.1.0
+
+# FORMS
+django-crispy-forms==2.1
+crispy-bootstrap4==2022.1
+
+# API
+djangorestframework==3.14.0
+
+# BACKUP
+django-dbbackup==4.0.2
+
+# BASIC TOOLS
+click==8.1.7
