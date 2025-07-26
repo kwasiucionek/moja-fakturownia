@@ -7,36 +7,72 @@ Updated for production deployment with security best practices.
 
 from pathlib import Path
 import os
-from decouple import config, Csv
+import environ
 import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Initialize environment variables
+env = environ.Env(
+    # set casting, default value
+    DEBUG=(bool, False),
+    SECRET_KEY=(str, 'django-insecure-0r!vdj6r+t*$*8$sb)^he#%lmg9@^!41j=a47t-gnv(@2_8r27'),
+    ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
+    SECURE_SSL_REDIRECT=(bool, False),
+    SECURE_HSTS_SECONDS=(int, 0),
+    SECURE_HSTS_INCLUDE_SUBDOMAINS=(bool, False),
+    SECURE_HSTS_PRELOAD=(bool, False),
+    SECURE_CONTENT_TYPE_NOSNIFF=(bool, True),
+    SECURE_BROWSER_XSS_FILTER=(bool, True),
+    SECURE_PROXY_SSL_HEADER=(bool, False),
+    SESSION_COOKIE_SECURE=(bool, False),
+    CSRF_COOKIE_SECURE=(bool, False),
+    LANGUAGE_CODE=(str, 'pl'),
+    TIME_ZONE=(str, 'Europe/Warsaw'),
+    STATIC_ROOT=(str, str(BASE_DIR / 'staticfiles')),
+    MEDIA_ROOT=(str, str(BASE_DIR / 'media')),
+    EMAIL_BACKEND=(str, 'django.core.mail.backends.console.EmailBackend'),
+    EMAIL_HOST=(str, ''),
+    EMAIL_PORT=(int, 587),
+    EMAIL_USE_TLS=(bool, True),
+    EMAIL_HOST_USER=(str, ''),
+    EMAIL_HOST_PASSWORD=(str, ''),
+    DEFAULT_FROM_EMAIL=(str, 'webmaster@localhost'),
+    LOG_LEVEL=(str, 'INFO'),
+    LOG_FILE=(str, ''),
+    ADMIN_URL=(str, 'admin/'),
+    CORS_ALLOWED_ORIGINS=(list, []),
+    ENABLE_API=(bool, False),
+)
+
+# Take environment variables from .env file
+environ.Env.read_env(BASE_DIR / '.env')
 
 # =============================================================================
 # SECURITY SETTINGS
 # =============================================================================
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-0r!vdj6r+t*$*8$sb)^he#%lmg9@^!41j=a47t-gnv(@2_8r27')
+SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=False, cast=bool)
+DEBUG = env('DEBUG')
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
 # Security headers
-SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
-SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
-SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
-SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
-SECURE_CONTENT_TYPE_NOSNIFF = config('SECURE_CONTENT_TYPE_NOSNIFF', default=True, cast=bool)
-SECURE_BROWSER_XSS_FILTER = config('SECURE_BROWSER_XSS_FILTER', default=True, cast=bool)
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if config('SECURE_PROXY_SSL_HEADER', default=False, cast=bool) else None
+SECURE_SSL_REDIRECT = env('SECURE_SSL_REDIRECT')
+SECURE_HSTS_SECONDS = env('SECURE_HSTS_SECONDS')
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env('SECURE_HSTS_INCLUDE_SUBDOMAINS')
+SECURE_HSTS_PRELOAD = env('SECURE_HSTS_PRELOAD')
+SECURE_CONTENT_TYPE_NOSNIFF = env('SECURE_CONTENT_TYPE_NOSNIFF')
+SECURE_BROWSER_XSS_FILTER = env('SECURE_BROWSER_XSS_FILTER')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if env('SECURE_PROXY_SSL_HEADER') else None
 
 # Cookies security
-SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
-CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
+SESSION_COOKIE_SECURE = env('SESSION_COOKIE_SECURE')
+CSRF_COOKIE_SECURE = env('CSRF_COOKIE_SECURE')
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
 SESSION_COOKIE_AGE = 3600 * 8  # 8 godzin
@@ -110,12 +146,16 @@ WSGI_APPLICATION = 'fakturownia.wsgi.application'
 # DATABASE
 # =============================================================================
 
+# Database URL can be provided via DATABASE_URL environment variable
+# If not provided, defaults to SQLite
+DATABASE_URL = env.db_url('DATABASE_URL', default='sqlite:///db.sqlite3')
+
 DATABASES = {
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL', default='sqlite:///db.sqlite3'),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
+    'default': {
+        **DATABASE_URL,
+        'CONN_MAX_AGE': 600,
+        'CONN_HEALTH_CHECKS': True,
+    }
 }
 
 # =============================================================================
@@ -144,8 +184,8 @@ AUTH_PASSWORD_VALIDATORS = [
 # INTERNATIONALIZATION
 # =============================================================================
 
-LANGUAGE_CODE = config('LANGUAGE_CODE', default='pl')
-TIME_ZONE = config('TIME_ZONE', default='Europe/Warsaw')
+LANGUAGE_CODE = env('LANGUAGE_CODE')
+TIME_ZONE = env('TIME_ZONE')
 USE_I18N = True
 USE_TZ = True
 
@@ -154,10 +194,10 @@ USE_TZ = True
 # =============================================================================
 
 STATIC_URL = '/static/'
-STATIC_ROOT = config('STATIC_ROOT', default=os.path.join(BASE_DIR, 'staticfiles'))
+STATIC_ROOT = env('STATIC_ROOT')
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = config('MEDIA_ROOT', default=os.path.join(BASE_DIR, 'media'))
+MEDIA_ROOT = env('MEDIA_ROOT')
 
 # WhiteNoise settings for static files
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
@@ -168,28 +208,37 @@ WHITENOISE_AUTOREFRESH = DEBUG
 # EMAIL CONFIGURATION
 # =============================================================================
 
-EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = config('EMAIL_HOST', default='')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='webmaster@localhost')
+EMAIL_BACKEND = env('EMAIL_BACKEND')
+EMAIL_HOST = env('EMAIL_HOST')
+EMAIL_PORT = env('EMAIL_PORT')
+EMAIL_USE_TLS = env('EMAIL_USE_TLS')
+EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
 
 # =============================================================================
 # CACHE CONFIGURATION
 # =============================================================================
 
-REDIS_URL = config('REDIS_URL', default=None)
+# Sprawdź czy REDIS_URL jest ustawiony i nie jest pusty
+REDIS_URL = env('REDIS_URL', default='')
 
-if REDIS_URL:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-            'LOCATION': REDIS_URL,
+if REDIS_URL and REDIS_URL.strip():
+    try:
+        # Użyj env.cache_url tylko jeśli REDIS_URL jest poprawny
+        cache_config = env.cache_url('REDIS_URL')
+        CACHES = {
+            'default': cache_config
         }
-    }
+    except Exception:
+        # Fallback do LocMem jeśli Redis URL jest nieprawidłowy
+        CACHES = {
+            'default': {
+                'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            }
+        }
 else:
+    # Użyj LocMem cache jako domyślny
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
@@ -200,8 +249,8 @@ else:
 # LOGGING
 # =============================================================================
 
-LOG_LEVEL = config('LOG_LEVEL', default='INFO')
-LOG_FILE = config('LOG_FILE', default=None)
+LOG_LEVEL = env('LOG_LEVEL')
+LOG_FILE = env('LOG_FILE')
 
 LOGGING = {
     'version': 1,
@@ -259,12 +308,13 @@ if LOG_FILE:
 # SENTRY CONFIGURATION (ERROR MONITORING)
 # =============================================================================
 
-SENTRY_DSN = config('SENTRY_DSN', default=None)
+SENTRY_DSN = env('SENTRY_DSN', default=None)
 
 if SENTRY_DSN and not DEBUG:
     import sentry_sdk
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
+    import logging
 
     sentry_logging = LoggingIntegration(
         level=logging.INFO,
@@ -375,7 +425,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS SETTINGS (jeśli używasz API)
 # =============================================================================
 
-CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='', cast=Csv())
+CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
 
 # =============================================================================
 # SESSIONS & SECURITY
@@ -391,7 +441,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
 
 # Admin URLs - zmień dla bezpieczeństwa w produkcji
-ADMIN_URL = config('ADMIN_URL', default='admin/')
+ADMIN_URL = env('ADMIN_URL')
 
 # =============================================================================
 # HEALTH CHECK
@@ -405,8 +455,15 @@ HEALTH_CHECK = {
 # BACKUP SETTINGS (opcjonalne)
 # =============================================================================
 
-DBBACKUP_STORAGE = config('DBBACKUP_STORAGE', default='django.core.files.storage.FileSystemStorage')
-DBBACKUP_STORAGE_OPTIONS = config('DBBACKUP_STORAGE_OPTIONS', default={'location': os.path.join(BASE_DIR, 'backups')}, cast=dict)
+DBBACKUP_STORAGE = env('DBBACKUP_STORAGE', default='django.core.files.storage.FileSystemStorage')
+
+# Bezpieczne parsowanie DBBACKUP_STORAGE_OPTIONS
+try:
+    # Spróbuj jako JSON string
+    DBBACKUP_STORAGE_OPTIONS = env.json('DBBACKUP_STORAGE_OPTIONS', default={'location': str(BASE_DIR / 'backups')})
+except ValueError:
+    # Fallback do wartości domyślnej
+    DBBACKUP_STORAGE_OPTIONS = {'location': str(BASE_DIR / 'backups')}
 
 # =============================================================================
 # CUSTOM SETTINGS FOR FAKTUROWNIA
@@ -420,6 +477,12 @@ DEFAULT_PAYMENT_DAYS = 14
 
 # Maksymalny rozmiar pliku PDF faktury (MB)
 MAX_INVOICE_PDF_SIZE = 10
+
+# =============================================================================
+# API ENDPOINTS (przyszłe rozszerzenia)
+# =============================================================================
+
+ENABLE_API = env('ENABLE_API')
 
 # =============================================================================
 # DEVELOPMENT OVERRIDES

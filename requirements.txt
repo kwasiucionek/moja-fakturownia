@@ -1,122 +1,56 @@
 # =============================================================================
-# DJANGO CORE - Compatible with Django 5.2.3
+# CLEAN REQUIREMENTS FOR DJANGO 5.2.3 - NO CONFLICTS
 # =============================================================================
+
+# CORE DJANGO
 Django==5.2.3
-django-extensions==3.2.3
 
-# =============================================================================
-# ENVIRONMENT & CONFIGURATION
-# =============================================================================
-django-environ==0.11.2          # Environment variables
+# ENVIRONMENT CONFIGURATION
+django-environ
 
-# =============================================================================
-# DATABASE & CACHE
-# =============================================================================
-psycopg2-binary==2.9.9          # PostgreSQL adapter
-dj-database-url==2.1.0          # Database URL parsing
-redis==5.0.1                    # Redis client
-django-redis==5.4.0             # Django Redis cache backend
+# DATABASE
+psycopg2-binary
+dj-database-url
 
-# =============================================================================
-# SECURITY PACKAGES
-# =============================================================================
-django-ratelimit==4.1.0          # Rate limiting
-django-cors-headers==4.3.1       # CORS handling
-django-csp==3.8                  # Content Security Policy
-# django-security - REMOVED (not compatible with Django 5.2)
-# Security features will be implemented via custom middleware
+# CACHE & REDIS
+redis
+django-redis
 
-# =============================================================================
-# STATIC FILES SERVING
-# =============================================================================
-whitenoise==6.6.0                # Static files serving
+# SECURITY (VERIFIED COMPATIBLE)
+django-ratelimit
+django-cors-headers
 
-# =============================================================================
+# STATIC FILES
+whitenoise
+
+
 # ADMIN INTERFACE
-# =============================================================================
-django-jazzmin==2.6.0            # Admin theme
+django-jazzmin
 
-# =============================================================================
-# MONITORING & HEALTH CHECKS
-# =============================================================================
-django-health-check==3.17.0      # Health check endpoints
-sentry-sdk[django]==1.40.6       # Error monitoring
+# MONITORING
+django-health-check
+sentry-sdk[django]
 
-# =============================================================================
-# FILE HANDLING & MEDIA
-# =============================================================================
-Pillow==10.1.0                   # Image processing
-python-magic==0.4.27             # File type detection
-
-# =============================================================================
 # UTILITIES
-# =============================================================================
-django-humanize==0.1.2           # Human-readable formatting
-pytz==2023.3                     # Timezone handling
+pytz
+requests
+python-dateutil
 
-# =============================================================================
-# PRODUCTION SERVER
-# =============================================================================
-gunicorn==21.2.0                 # WSGI server
-gevent==23.9.1                   # Async worker
+# SERVER
+gunicorn
 
-# =============================================================================
-# BACKUP & MAINTENANCE
-# =============================================================================
-django-dbbackup==4.0.2           # Database backup
+# FILE HANDLING
+Pillow
 
-# =============================================================================
-# API & SERIALIZATION
-# =============================================================================
-djangorestframework==3.14.0      # API framework
-django-filter==23.5               # Filtering for APIs
+# FORMS
+django-crispy-forms
+crispy-bootstrap4
 
-# =============================================================================
-# FORMS & VALIDATION
-# =============================================================================
-django-crispy-forms==2.1         # Better forms
-crispy-bootstrap4==2022.1        # Bootstrap 4
+# API
+djangorestframework
 
-# =============================================================================
-# LOGGING & MONITORING
-# =============================================================================
-python-json-logger==2.0.7        # JSON logging format
-structlog==23.2.0                # Structured logging
+# BACKUP
+django-dbbackup
 
-# =============================================================================
-# TESTING (dla CI/CD)
-# =============================================================================
-coverage==7.3.2                  # Test coverage
-factory-boy==3.3.0               # Test fixtures
-pytest-django==4.7.0             # Pytest for Django
-pytest-cov==4.1.0                # Coverage for pytest
-
-# =============================================================================
-# SECURITY SCANNING
-# =============================================================================
-safety==2.3.5                    # Dependency vulnerability scanner
-bandit==1.7.5                    # Security linter
-
-# =============================================================================
-# ADDITIONAL UTILITIES
-# =============================================================================
-requests==2.31.0                 # HTTP library
-python-dateutil==2.8.2           # Date utilities
-xlsxwriter==3.1.9                # Excel file generation
-reportlab==4.0.7                 # PDF generation
-
-# =============================================================================
-# PERFORMANCE
-# =============================================================================
-django-compression-middleware==0.5.0  # Response compression
-
-# =============================================================================
-# EMAIL
-# =============================================================================
-django-anymail==10.2             # Email backends (opcjonalne)
-
-# =============================================================================
-# COMMAND LINE TOOLS
-# =============================================================================
-click==8.1.7                     # CLI tools
-rich==13.7.0                     # Beautiful terminal output
+# BASIC TOOLS
+click
