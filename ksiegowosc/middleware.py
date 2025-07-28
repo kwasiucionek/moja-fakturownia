@@ -105,3 +105,19 @@ class UserGroupMiddleware:
 
         response = self.get_response(request)
         return response
+
+from django.shortcuts import redirect
+
+class AdminLoginRedirectMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Sprawdź dokładną ścieżkę
+        if request.path == '/admin/login/':
+            next_url = request.GET.get('next', '/admin/')
+            return redirect(f'/auth/login/?next={next_url}')
+
+        # Kontynuuj obsługę normalnie
+        response = self.get_response(request)
+        return response
