@@ -91,17 +91,18 @@ INSTALLED_APPS = [
     'whitenoise.runserver_nostatic',  # Dla plików statycznych w produkcji
     'django.contrib.staticfiles',
     'django.contrib.humanize',
-    
+    'social_django',
+
     # Third party apps
     'corsheaders',
     'django_extensions',
-    
+
     # Dodatkowe tylko w development
     *(['debug_toolbar'] if DEBUG else []),
-    
+
     # Local apps
     'ksiegowosc',
-    
+
     # Health check
     'health_check',
     'health_check.db',
@@ -115,6 +116,7 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Pliki statyczne
     'django.contrib.sessions.middleware.SessionMiddleware',
     *(['debug_toolbar.middleware.DebugToolbarMiddleware'] if DEBUG else []),
+    'social_django.middleware.SocialAuthExceptionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -133,6 +135,8 @@ TEMPLATES = [
             'context_processors': [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
+                'social_django.context_processors.backends',
+                'social_django.context_processors.login_redirect',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -493,9 +497,46 @@ if DEBUG:
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SECURE = False
     SECURE_SSL_REDIRECT = False
-    
+
     # Email w konsoli
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-    
+
     # Dodatkowe narzędzia deweloperskie
     SHELL_PLUS_PRINT_SQL = True
+
+
+    # Google OAuth Settings
+    SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = env('GOOGLE_OAUTH2_KEY', default='')
+    SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = env('GOOGLE_OAUTH2_SECRET', default='')
+
+    # Social Auth Settings
+    SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = [
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+    ]
+
+    SOCIAL_AUTH_GOOGLE_OAUTH2_EXTRA_DATA = ['first_name', 'last_name']
+
+    # Pipeline dla automatycznego przypisania do grupy
+    SOCIAL_AUTH_PIPELINE = (
+        'social_core.pipeline.social_auth.social_details',
+        'social_core.pipeline.social_auth.social_uid',
+        'social_core.pipeline.social_auth.social_user',
+        'social_core.pipeline.user.get_username',
+        'social_core.pipeline.user.create_user',
+        'ksiegowosc.auth_pipeline.assign_to_ksiegowosc_group',  # Custom pipeline
+        'social_core.pipeline.social_auth.associate_user',
+        'social_core.pipeline.social_auth.load_extra_data',
+        'social_core.pipeline.user.user_details',
+    )
+
+    # Przekierowania po logowaniu
+    SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/auth/dashboard/'
+    SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/admin/ksiegowosc/companyinfo/add/'
+    SOCIAL_AUTH_LOGIN_ERROR_URL = '/auth/login/'
+
+
+AUTHENTICATION_BACKENDS = (
+    'social_core.backends.google.GoogleOAuth2',
+    'django.contrib.auth.backends.ModelBackend',
+)

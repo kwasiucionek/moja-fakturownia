@@ -14,6 +14,8 @@ from django.views.decorators.http import require_http_methods
 from django.db import connection
 from django.core.cache import cache
 import logging
+from django.views.generic.base import RedirectView
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ def health_check(request):
             'database': 'unknown',
             'cache': 'unknown',
         }
-        
+
         # Test bazy danych
         try:
             with connection.cursor() as cursor:
@@ -44,7 +46,7 @@ def health_check(request):
             status['database'] = 'error'
             status['status'] = 'unhealthy'
             logger.error(f"Database health check failed: {e}")
-        
+
         # Test cache
         try:
             cache_key = 'health_check_test'
@@ -58,12 +60,12 @@ def health_check(request):
             status['cache'] = 'error'
             status['status'] = 'degraded'
             logger.warning(f"Cache health check failed: {e}")
-        
+
         # HTTP status code na podstawie statusu
         http_status = 200 if status['status'] == 'healthy' else 503
-        
+
         return JsonResponse(status, status=http_status)
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return JsonResponse({
@@ -80,10 +82,10 @@ def ready_check(request):
     try:
         # Sprawdź kluczowe komponenty
         from ksiegowosc.models import CompanyInfo
-        
+
         # Test modelu (czy migracje zostały wykonane)
         CompanyInfo.objects.first()
-        
+
         return HttpResponse("ready", content_type="text/plain", status=200)
     except Exception as e:
         logger.error(f"Readiness check failed: {e}")
@@ -119,7 +121,7 @@ Sitemap: {protocol}://{domain}/sitemap.xml
         protocol='https' if request.is_secure() else 'http',
         domain=request.get_host()
     )
-    
+
     return HttpResponse(content, content_type="text/plain")
 
 
@@ -133,17 +135,23 @@ admin_url = getattr(settings, 'ADMIN_URL', 'admin/')
 urlpatterns = [
     # Admin panel
     path(admin_url, admin.site.urls),
-    
+
     # Health checks
     path('health/', health_check, name='health_check'),
     path('ready/', ready_check, name='ready_check'),
     path('live/', live_check, name='live_check'),
-    
+
     # SEO
     path('robots.txt', robots_txt, name='robots_txt'),
-    
+
     # Health check apps (jeśli zainstalowane)
     path('health/', include('health_check.urls')),
+
+    # Przekierowanie głównej strony na logowanie
+    path('', RedirectView.as_view(url='/auth/login/', permanent=False)),
+
+        # Social auth
+    path('social-auth/', include('social_django.urls', namespace='social')),
 ]
 
 # =============================================================================
@@ -225,7 +233,7 @@ from django.middleware.security import SecurityMiddleware
 
 if settings.DEBUG:
     from django.views.generic import TemplateView
-    
+
     # Test page for development
     urlpatterns += [
         path('test/', TemplateView.as_view(template_name='test.html'), name='test_page'),
