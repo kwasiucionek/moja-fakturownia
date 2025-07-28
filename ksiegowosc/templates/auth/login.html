@@ -16,7 +16,7 @@
 <!-- Login Form -->
 <form method="post">
     {% csrf_token %}
-    
+
     <div class="mb-3">
         <label for="{{ form.username.id_for_label }}" class="form-label">
             <i class="fas fa-user me-1"></i> Nazwa użytkownika
@@ -24,7 +24,7 @@
         {{ form.username }}
         {{ form.username.errors }}
     </div>
-    
+
     <div class="mb-3">
         <label for="{{ form.password.id_for_label }}" class="form-label">
             <i class="fas fa-lock me-1"></i> Hasło
@@ -32,7 +32,7 @@
         {{ form.password }}
         {{ form.password.errors }}
     </div>
-    
+
     <!-- Remember Me -->
     <div class="row mb-3">
         <div class="col">
@@ -49,7 +49,7 @@
             </a>
         </div>
     </div>
-    
+
     <!-- Submit Button -->
     <div class="d-grid">
         <button type="submit" class="btn btn-primary">
@@ -59,10 +59,8 @@
 </form>
 
 <!-- Register Link -->
-<div class="text-center mt-3">
-    <p class="mb-0">
-        Nie masz konta? 
-        <a href="{% url 'auth:register' %}" class="text-decoration-none">Zarejestruj się</a>
-    </p>
+<div class="text-center mt-4">
+  <a href="{% url 'auth:register' %}" class="btn btn-outline-primary btn-lg">Zarejestruj się</a>
 </div>
+
 {% endblock %}

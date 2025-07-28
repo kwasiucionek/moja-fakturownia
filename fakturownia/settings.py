@@ -112,6 +112,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'ksiegowosc.middleware.AdminLoginRedirectMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Pliki statyczne
     'django.contrib.sessions.middleware.SessionMiddleware',
     *(['debug_toolbar.middleware.DebugToolbarMiddleware'] if DEBUG else []),
@@ -336,6 +337,14 @@ if SENTRY_DSN and not DEBUG:
         send_default_pii=False,
         environment='production' if not DEBUG else 'development',
     )
+
+
+
+LOGIN_URL = '/auth/login/'
+LOGOUT_REDIRECT_URL = '/auth/login/'
+LOGIN_REDIRECT_URL = '/auth/dashboard/'
+
+
 
 # =============================================================================
 # JAZZMIN CONFIGURATION
