@@ -41,7 +41,6 @@ env = environ.Env(
     DEFAULT_FROM_EMAIL=(str, 'webmaster@localhost'),
     LOG_LEVEL=(str, 'INFO'),
     LOG_FILE=(str, ''),
-    ADMIN_URL=(str, 'admin/'),
     CORS_ALLOWED_ORIGINS=(list, []),
     ENABLE_API=(bool, False),
 )
@@ -444,9 +443,6 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
 
-# Admin URLs - zmień dla bezpieczeństwa w produkcji
-ADMIN_URL = env('ADMIN_URL')
-
 # =============================================================================
 # HEALTH CHECK
 # =============================================================================
@@ -504,7 +500,6 @@ if DEBUG:
     # Dodatkowe narzędzia deweloperskie
     SHELL_PLUS_PRINT_SQL = True
 
-
     # Google OAuth Settings
     SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = env('GOOGLE_OAUTH2_KEY', default='')
     SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = env('GOOGLE_OAUTH2_SECRET', default='')
@@ -534,7 +529,6 @@ if DEBUG:
     SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/auth/dashboard/'
     SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/admin/ksiegowosc/companyinfo/add/'
     SOCIAL_AUTH_LOGIN_ERROR_URL = '/auth/login/'
-
 
 AUTHENTICATION_BACKENDS = (
     'social_core.backends.google.GoogleOAuth2',

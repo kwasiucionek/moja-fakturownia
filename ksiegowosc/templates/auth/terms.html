@@ -1,0 +1,34 @@
+{% extends "auth/base.html" %}
+
+{% block content %}
+<div class="terms-content" style="max-height: 400px; overflow-y: auto;">
+    <h4>Regulamin serwisu Fakturownia</h4>
+    
+    <h6>§ 1. Postanowienia ogólne</h6>
+    <p>1. Niniejszy regulamin określa zasady korzystania z serwisu Fakturownia.</p>
+    <p>2. Serwis przeznaczony jest do prowadzenia ewidencji księgowej dla małych firm.</p>
+    <p>3. Korzystanie z serwisu oznacza akceptację niniejszego regulaminu.</p>
+    
+    <h6>§ 2. Rejestracja</h6>
+    <p>1. Rejestracja w serwisie jest bezpłatna.</p>
+    <p>2. Użytkownik zobowiązuje się podać prawdziwe dane.</p>
+    <p>3. Każdy użytkownik może mieć tylko jedno konto.</p>
+    
+    <h6>§ 3. Ochrona danych</h6>
+    <p>1. Dane użytkowników są chronione zgodnie z RODO.</p>
+    <p>2. Nie udostępniamy danych osobowych stronom trzecim.</p>
+    <p>3. Dane są przechowywane na bezpiecznych serwerach.</p>
+    
+    <h6>§ 4. Odpowiedzialność</h6>
+    <p>1. Użytkownik ponosi odpowiedzialność za poprawność wprowadzanych danych.</p>
+    <p>2. Serwis nie ponosi odpowiedzialności za błędy w rozliczeniach podatkowych.</p>
+    
+    <p class="mt-4"><small class="text-muted">Ostatnia aktualizacja: {{ "now"|date:"d.m.Y" }}</small></p>
+</div>
+
+<div class="text-center mt-3">
+    <a href="{% url 'auth:register' %}" class="btn btn-primary">
+        Akceptuję i wracam do rejestracji
+    </a>
+</div>
+{% endblock %}
