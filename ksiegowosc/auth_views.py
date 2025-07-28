@@ -100,7 +100,7 @@ def profile_view(request):
         if form.is_valid():
             form.save()
             messages.success(request, 'Profil został zaktualizowany.')
-            return redirect('profile')
+            return redirect('auth:profile')
     else:
         form = UserProfileForm(instance=request.user)
     
@@ -198,4 +198,4 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_valid(form)
     
     def get_success_url(self):
-        return reverse('profile')
+        return reverse('auth:profile')

@@ -1,0 +1,60 @@
+{% extends "auth/base.html" %}
+
+{% block content %}
+<div class="privacy-content" style="max-height: 400px; overflow-y: auto;">
+    <h4>Polityka Prywatności</h4>
+    
+    <h6>1. Administrator danych</h6>
+    <p>Administratorem danych osobowych jest właściciel serwisu Fakturownia.</p>
+    
+    <h6>2. Rodzaje przetwarzanych danych</h6>
+    <p>Przetwarzamy następujące dane osobowe:</p>
+    <ul>
+        <li>Imię i nazwisko</li>
+        <li>Adres email</li>
+        <li>Nazwę użytkownika</li>
+        <li>Dane firmy (nazwa, NIP, adres)</li>
+        <li>Dane kontrahentów wprowadzone przez użytkownika</li>
+    </ul>
+    
+    <h6>3. Cel przetwarzania</h6>
+    <p>Dane przetwarzamy w celu:</p>
+    <ul>
+        <li>Świadczenia usług księgowych</li>
+        <li>Komunikacji z użytkownikiem</li>
+        <li>Zapewnienia bezpieczeństwa serwisu</li>
+        <li>Spełnienia obowiązków prawnych</li>
+    </ul>
+    
+    <h6>4. Podstawa prawna</h6>
+    <p>Podstawą przetwarzania jest wykonanie umowy oraz zgoda użytkownika.</p>
+    
+    <h6>5. Okres przechowywania</h6>
+    <p>Dane przechowujemy przez okres korzystania z serwisu oraz przez czas wymagany przepisami prawa.</p>
+    
+    <h6>6. Prawa użytkownika</h6>
+    <p>Użytkownik ma prawo do:</p>
+    <ul>
+        <li>Dostępu do swoich danych</li>
+        <li>Sprostowania danych</li>
+        <li>Usunięcia danych</li>
+        <li>Ograniczenia przetwarzania</li>
+        <li>Przenoszenia danych</li>
+        <li>Sprzeciwu wobec przetwarzania</li>
+    </ul>
+    
+    <h6>7. Bezpieczeństwo</h6>
+    <p>Stosujemy odpowiednie środki techniczne i organizacyjne w celu zabezpieczenia danych osobowych.</p>
+    
+    <h6>8. Kontakt</h6>
+    <p>W sprawach dotyczących ochrony danych osobowych można skontaktować się przez formularz kontaktowy w serwisie.</p>
+    
+    <p class="mt-4"><small class="text-muted">Ostatnia aktualizacja: {{ "now"|date:"d.m.Y" }}</small></p>
+</div>
+
+<div class="text-center mt-3">
+    <a href="{% url 'auth:register' %}" class="btn btn-primary">
+        Akceptuję i wracam do rejestracji
+    </a>
+</div>
+{% endblock %}

@@ -136,6 +136,9 @@ urlpatterns = [
     # Admin panel
     path(admin_url, admin.site.urls),
 
+    # Autoryzacja i uwierzytelnianie
+    path('auth/', include('ksiegowosc.auth_urls', namespace='auth')),
+
     # Health checks
     path('health/', health_check, name='health_check'),
     path('ready/', ready_check, name='ready_check'),
@@ -150,7 +153,7 @@ urlpatterns = [
     # Przekierowanie głównej strony na logowanie
     path('', RedirectView.as_view(url='/auth/login/', permanent=False)),
 
-        # Social auth
+    # Social auth
     path('social-auth/', include('social_django.urls', namespace='social')),
 ]
 

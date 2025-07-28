@@ -1,10 +1,25 @@
 # ksiegowosc/auth_forms.py
 
 from django import forms
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth.models import User, Group
 from django.core.exceptions import ValidationError
 import re
+
+
+class CustomAuthenticationForm(AuthenticationForm):
+    """Custom login form z Bootstrap CSS"""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['username'].widget.attrs.update({
+            'class': 'form-control',
+            'placeholder': 'Nazwa użytkownika lub email'
+        })
+        self.fields['password'].widget.attrs.update({
+            'class': 'form-control',
+            'placeholder': 'Hasło'
+        })
 
 
 class CustomUserCreationForm(UserCreationForm):
