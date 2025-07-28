@@ -1,0 +1,535 @@
+<!-- ksiegowosc/templates/auth/base.html -->
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title|default:"Fakturownia" }} - System Księgowy</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        .auth-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .auth-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .auth-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        .auth-body {
+            padding: 2rem;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 0.75rem 2rem;
+            font-weight: 500;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            transform: translateY(-1px);
+        }
+        .social-btn {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .btn-google {
+            background-color: #db4437;
+            color: white;
+        }
+        .btn-google:hover {
+            background-color: #c23321;
+            color: white;
+            transform: translateY(-1px);
+        }
+        .divider {
+            text-align: center;
+            margin: 1.5rem 0;
+            position: relative;
+        }
+        .divider::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #dee2e6;
+        }
+        .divider span {
+            background: white;
+            padding: 0 1rem;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .help-text {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+        .errorlist {
+            list-style: none;
+            padding: 0;
+            margin: 0.5rem 0;
+        }
+        .errorlist li {
+            color: #dc3545;
+            font-size: 0.875rem;
+        }
+        .terms-link {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        .terms-link a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        .terms-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-6 col-lg-5">
+                    <div class="auth-card">
+                        <div class="auth-header">
+                            <h1 class="h3 mb-2">
+                                <i class="fas fa-calculator me-2"></i>
+                                Fakturownia
+                            </h1>
+                            <p class="mb-0">{{ title|default:"System Księgowy" }}</p>
+                        </div>
+                        
+                        <div class="auth-body">
+                            <!-- Messages -->
+                            {% if messages %}
+                                {% for message in messages %}
+                                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                    </div>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {% block content %}{% endblock %}
+                        </div>
+                    </div>
+                    
+                    <div class="text-center mt-3">
+                        <small class="text-white-50">
+                            © {{ "now"|date:"Y" }} Fakturownia. 
+                            <a href="{% url 'auth:terms' %}" class="text-white-50">Regulamin</a> | 
+                            <a href="{% url 'auth:privacy' %}" class="text-white-50">Prywatność</a>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+<!-- ksiegowosc/templates/auth/register.html -->
+{% extends "auth/base.html" %}
+
+{% block content %}
+<!-- Social Login Section -->
+<div class="social-login mb-4">
+    <a href="{% url 'social:begin' 'google-oauth2' %}" class="social-btn btn-google">
+        <i class="fab fa-google me-2"></i>
+        Zarejestruj się przez Google
+    </a>
+</div>
+
+<div class="divider">
+    <span>lub zarejestruj się emailem</span>
+</div>
+
+<!-- Registration Form -->
+<form method="post">
+    {% csrf_token %}
+    
+    <!-- Username -->
+    <div class="mb-3">
+        <label for="{{ form.username.id_for_label }}" class="form-label">
+            <i class="fas fa-user me-1"></i> Nazwa użytkownika
+        </label>
+        {{ form.username }}
+        {% if form.username.help_text %}
+            <div class="help-text">{{ form.username.help_text }}</div>
+        {% endif %}
+        {{ form.username.errors }}
+    </div>
+    
+    <!-- Name Fields -->
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label for="{{ form.first_name.id_for_label }}" class="form-label">
+                <i class="fas fa-user me-1"></i> Imię
+            </label>
+            {{ form.first_name }}
+            {{ form.first_name.errors }}
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="{{ form.last_name.id_for_label }}" class="form-label">
+                <i class="fas fa-user me-1"></i> Nazwisko
+            </label>
+            {{ form.last_name }}
+            {{ form.last_name.errors }}
+        </div>
+    </div>
+    
+    <!-- Email -->
+    <div class="mb-3">
+        <label for="{{ form.email.id_for_label }}" class="form-label">
+            <i class="fas fa-envelope me-1"></i> Email
+        </label>
+        {{ form.email }}
+        {% if form.email.help_text %}
+            <div class="help-text">{{ form.email.help_text }}</div>
+        {% endif %}
+        {{ form.email.errors }}
+    </div>
+    
+    <!-- Company Name -->
+    <div class="mb-3">
+        <label for="{{ form.company_name.id_for_label }}" class="form-label">
+            <i class="fas fa-building me-1"></i> Nazwa firmy
+        </label>
+        {{ form.company_name }}
+        {% if form.company_name.help_text %}
+            <div class="help-text">{{ form.company_name.help_text }}</div>
+        {% endif %}
+        {{ form.company_name.errors }}
+    </div>
+    
+    <!-- Password Fields -->
+    <div class="mb-3">
+        <label for="{{ form.password1.id_for_label }}" class="form-label">
+            <i class="fas fa-lock me-1"></i> Hasło
+        </label>
+        {{ form.password1 }}
+        {% if form.password1.help_text %}
+            <div class="help-text">{{ form.password1.help_text }}</div>
+        {% endif %}
+        {{ form.password1.errors }}
+    </div>
+    
+    <div class="mb-3">
+        <label for="{{ form.password2.id_for_label }}" class="form-label">
+            <i class="fas fa-lock me-1"></i> Potwierdź hasło
+        </label>
+        {{ form.password2 }}
+        {{ form.password2.errors }}
+    </div>
+    
+    <!-- Terms Checkbox -->
+    <div class="mb-3">
+        <div class="form-check">
+            {{ form.terms_accepted }}
+            <label class="form-check-label" for="{{ form.terms_accepted.id_for_label }}">
+                Akceptuję <a href="{% url 'auth:terms' %}" target="_blank">regulamin</a> 
+                i <a href="{% url 'auth:privacy' %}" target="_blank">politykę prywatności</a>
+            </label>
+        </div>
+        {{ form.terms_accepted.errors }}
+    </div>
+    
+    <!-- Submit Button -->
+    <div class="d-grid">
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-user-plus me-2"></i> Utwórz konto
+        </button>
+    </div>
+</form>
+
+<!-- Login Link -->
+<div class="text-center mt-3">
+    <p class="mb-0">
+        Masz już konto? 
+        <a href="{% url 'auth:login' %}" class="text-decoration-none">Zaloguj się</a>
+    </p>
+</div>
+{% endblock %}
+
+<!-- ksiegowosc/templates/auth/login.html -->
+{% extends "auth/base.html" %}
+
+{% block content %}
+<!-- Social Login Section -->
+<div class="social-login mb-4">
+    <a href="{% url 'social:begin' 'google-oauth2' %}" class="social-btn btn-google">
+        <i class="fab fa-google me-2"></i>
+        Zaloguj się przez Google
+    </a>
+</div>
+
+<div class="divider">
+    <span>lub zaloguj się emailem</span>
+</div>
+
+<!-- Login Form -->
+<form method="post">
+    {% csrf_token %}
+    
+    <div class="mb-3">
+        <label for="{{ form.username.id_for_label }}" class="form-label">
+            <i class="fas fa-user me-1"></i> Nazwa użytkownika
+        </label>
+        {{ form.username }}
+        {{ form.username.errors }}
+    </div>
+    
+    <div class="mb-3">
+        <label for="{{ form.password.id_for_label }}" class="form-label">
+            <i class="fas fa-lock me-1"></i> Hasło
+        </label>
+        {{ form.password }}
+        {{ form.password.errors }}
+    </div>
+    
+    <!-- Remember Me -->
+    <div class="row mb-3">
+        <div class="col">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="remember_me" id="remember_me">
+                <label class="form-check-label" for="remember_me">
+                    Zapamiętaj mnie
+                </label>
+            </div>
+        </div>
+        <div class="col-auto">
+            <a href="{% url 'auth:password_reset' %}" class="text-decoration-none small">
+                Zapomniałeś hasła?
+            </a>
+        </div>
+    </div>
+    
+    <!-- Submit Button -->
+    <div class="d-grid">
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-sign-in-alt me-2"></i> Zaloguj się
+        </button>
+    </div>
+</form>
+
+<!-- Register Link -->
+<div class="text-center mt-3">
+    <p class="mb-0">
+        Nie masz konta? 
+        <a href="{% url 'auth:register' %}" class="text-decoration-none">Zarejestruj się</a>
+    </p>
+</div>
+{% endblock %}
+
+<!-- ksiegowosc/templates/auth/profile.html -->
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid pt-3">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-user"></i> Mój profil
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.first_name.id_for_label }}" class="form-label">Imię</label>
+                                {{ form.first_name }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.last_name.id_for_label }}" class="form-label">Nazwisko</label>
+                                {{ form.last_name }}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.email.id_for_label }}" class="form-label">Email</label>
+                            {{ form.email }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Nazwa użytkownika</label>
+                            <input type="text" class="form-control" value="{{ user.username }}" readonly>
+                            <small class="text-muted">Nazwa użytkownika nie może być zmieniona</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Data dołączenia</label>
+                            <input type="text" class="form-control" value="{{ user.date_joined|date:'d.m.Y H:i' }}" readonly>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Zapisz zmiany
+                        </button>
+                        <a href="{% url 'auth:password_change' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-key"></i> Zmień hasło
+                        </a>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">
+                        <i class="fas fa-building"></i> Dane firmy
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if company_info %}
+                        <p><strong>Nazwa firmy:</strong><br>{{ company_info.company_name }}</p>
+                        <p><strong>NIP:</strong> {{ company_info.tax_id|default:"Nie podano" }}</p>
+                        <p><strong>Miasto:</strong> {{ company_info.city|default:"Nie podano" }}</p>
+                        <div class="d-grid">
+                            <a href="{% url 'admin:ksiegowosc_companyinfo_change' company_info.pk %}" class="btn btn-outline-primary">
+                                <i class="fas fa-edit"></i> Edytuj dane firmy
+                            </a>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">Nie uzupełniono danych firmy</p>
+                        <div class="d-grid">
+                            <a href="{% url 'admin:ksiegowosc_companyinfo_add' %}" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Dodaj dane firmy
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="card-title">
+                        <i class="fas fa-info-circle"></i> Informacje o koncie
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p><strong>Typ konta:</strong> Księgowość</p>
+                    <p><strong>Dostęp do panelu:</strong> Tak</p>
+                    <p><strong>Grupy:</strong> 
+                        {% for group in user.groups.all %}
+                            <span class="badge bg-secondary">{{ group.name }}</span>
+                        {% empty %}
+                            Brak grup
+                        {% endfor %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+<!-- ksiegowosc/templates/auth/password_reset.html -->
+{% extends "auth/base.html" %}
+
+{% block content %}
+<div class="text-center mb-4">
+    <i class="fas fa-key fa-3x text-muted mb-3"></i>
+    <h4>Reset hasła</h4>
+    <p class="text-muted">Wprowadź swój adres email, a wyślemy Ci link do resetowania hasła.</p>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+    
+    <div class="mb-3">
+        <label for="{{ form.email.id_for_label }}" class="form-label">
+            <i class="fas fa-envelope me-1"></i> Email
+        </label>
+        {{ form.email }}
+        {{ form.email.errors }}
+    </div>
+    
+    <div class="d-grid">
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-paper-plane me-2"></i> Wyślij link resetowania
+        </button>
+    </div>
+</form>
+
+<div class="text-center mt-3">
+    <a href="{% url 'auth:login' %}" class="text-decoration-none">
+        <i class="fas fa-arrow-left me-1"></i> Powrót do logowania
+    </a>
+</div>
+{% endblock %}
+
+<!-- ksiegowosc/templates/auth/terms.html -->
+{% extends "auth/base.html" %}
+
+{% block content %}
+<div class="terms-content" style="max-height: 400px; overflow-y: auto;">
+    <h4>Regulamin serwisu Fakturownia</h4>
+    
+    <h6>§ 1. Postanowienia ogólne</h6>
+    <p>1. Niniejszy regulamin określa zasady korzystania z serwisu Fakturownia.</p>
+    <p>2. Serwis przeznaczony jest do prowadzenia ewidencji księgowej dla małych firm.</p>
+    <p>3. Korzystanie z serwisu oznacza akceptację niniejszego regulaminu.</p>
+    
+    <h6>§ 2. Rejestracja</h6>
+    <p>1. Rejestracja w serwisie jest bezpłatna.</p>
+    <p>2. Użytkownik zobowiązuje się podać prawdziwe dane.</p>
+    <p>3. Każdy użytkownik może mieć tylko jedno konto.</p>
+    
+    <h6>§ 3. Ochrona danych</h6>
+    <p>1. Dane użytkowników są chronione zgodnie z RODO.</p>
+    <p>2. Nie udostępniamy danych osobowych stronom trzecim.</p>
+    <p>3. Dane są przechowywane na bezpiecznych serwerach.</p>
+    
+    <h6>§ 4. Odpowiedzialność</h6>
+    <p>1. Użytkownik ponosi odpowiedzialność za poprawność wprowadzanych danych.</p>
+    <p>2. Serwis nie ponosi odpowiedzialności za błędy w rozliczeniach podatkowych.</p>
+    
+    <p class="mt-4"><small class="text-muted">Ostatnia aktualizacja: {{ "now"|date:"d.m.Y" }}</small></p>
+</div>
+
+<div class="text-center mt-3">
+    <a href="{% url 'auth:register' %}" class="btn btn-primary">
+        Akceptuję i wracam do rejestracji
+    </a>
+</div>
+{% endblock %}
