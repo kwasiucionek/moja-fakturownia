@@ -848,8 +848,115 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
             path('dashboard/', self.admin_site.admin_view(self.dashboard_view), name='ksiegowosc_dashboard'),
             path('oblicz/', self.admin_site.admin_view(self.calculate_view), name='ksiegowosc_monthlysettlement_calculate'),
             path('kalkulator-zus/', self.admin_site.admin_view(self.zus_calculator_view), name='ksiegowosc_monthlysettlement_zus_calculator'),
+            path('import-jpk-ewp/', self.admin_site.admin_view(self.import_jpk_ewp_view), name='ksiegowosc_monthlysettlement_import_jpk_ewp'),
         ]
         return my_urls + urls
+
+    def import_jpk_ewp_view(self, request):
+        context = dict(
+            self.admin_site.each_context(request),
+            opts=self.model._meta,
+            title='Import rozliczeń z JPK_EWP',
+        )
+
+        if request.method == 'POST' and request.FILES.get('xml_file'):
+            xml_file = request.FILES['xml_file']
+            try:
+                if xml_file.size > 50 * 1024 * 1024: # 50MB
+                    messages.error(request, "Plik jest za duży (maksymalny rozmiar to 50MB).")
+                    return render(request, 'admin/ksiegowosc/monthlysettlement/import_jpk_ewp.html', context)
+                if not xml_file.name.lower().endswith('.xml'):
+                    messages.error(request, "Nieprawidłowe rozszerzenie pliku. Wymagany jest plik .xml.")
+                    return render(request, 'admin/ksiegowosc/monthlysettlement/import_jpk_ewp.html', context)
+
+                with transaction.atomic():
+                    created_count, updated_count, warnings = self.parse_jpk_ewp_file(xml_file, request.user)
+
+                # Bardziej szczegółowy komunikat o sukcesie
+                if created_count or updated_count:
+                    msg = f"Import zakończony pomyślnie. Utworzono: {created_count}, zaktualizowano: {updated_count} rozliczeń."
+                    messages.success(request, msg)
+                else:
+                    messages.info(request, "Nie znaleziono nowych danych do importu w pliku.")
+
+                # Dodawanie ostrzeżeń za pomocą messages framework
+                for warning in warnings:
+                    messages.add_message(request, messages.WARNING, warning)
+
+                return redirect('admin:ksiegowosc_monthlysettlement_changelist')
+
+            except ValueError as e:
+                messages.error(request, str(e))
+            except Exception as e:
+                messages.error(request, f"Wystąpił nieoczekiwany błąd podczas przetwarzania pliku: {str(e)}")
+
+        return render(request, 'admin/ksiegowosc/monthlysettlement/import_jpk_ewp.html', context)
+
+    # Nowa metoda do parsowania pliku JPK_EWP
+    def parse_jpk_ewp_file(self, xml_file, user):
+        try:
+            xml_content = xml_file.read()
+            if isinstance(xml_content, bytes):
+                try:
+                    xml_content = xml_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        xml_content = xml_content.decode('windows-1250')
+                    except UnicodeDecodeError:
+                        xml_content = xml_content.decode('iso-8859-2')
+
+            if 'JPK' not in xml_content:
+                raise ValueError("Plik nie wygląda na plik JPK.")
+
+            root = ET.fromstring(xml_content)
+            namespaces = {'tns': 'http://jpk.mf.gov.pl/wzor/2022/02/01/02011/'}
+            ewp_wiersze = root.findall('tns:EWPWiersz', namespaces)
+
+            if not ewp_wiersze:
+                 raise ValueError("Nie znaleziono żadnych wpisów w pliku JPK_EWP.")
+
+            monthly_revenues = {}
+            for wiersz in ewp_wiersze:
+                date_str = wiersz.find('tns:K_2', namespaces).text
+                date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                year_month = (date.year, date.month)
+
+                revenue = Decimal(wiersz.find('tns:K_7', namespaces).text) + Decimal(wiersz.find('tns:K_11', namespaces).text)
+
+                if year_month not in monthly_revenues:
+                    monthly_revenues[year_month] = Decimal('0.00')
+                monthly_revenues[year_month] += revenue
+
+            created_count = 0
+            updated_count = 0
+            import_warnings = []
+            updated_settlements_exist = False
+
+            for (year, month), total_revenue in monthly_revenues.items():
+                settlement, created = MonthlySettlement.objects.update_or_create(
+                    user=user, year=year, month=month,
+                    defaults={
+                        'total_revenue': total_revenue,
+                        'health_insurance_paid': 0,
+                        'social_insurance_paid': 0,
+                        'labor_fund_paid': 0,
+                        'income_tax_payable': 0
+                    }
+                )
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+
+            warnings = []
+            if created_count or updated_count:
+                warnings.append(
+                    "Pamiętaj, aby uzupełnić informacje o zapłaconych składkach ZUS (zdrowotne, społeczne, fundusz pracy) dla zaimportowanych miesięcy."
+                )
+
+            return created_count, updated_count, warnings
+        except ET.ParseError as e:
+            raise ValueError(f"Błąd parsowania XML: {str(e)}")
 
     def dashboard_view(self, request):
         """Dashboard z integracją rozliczenia rocznego i płatności"""
