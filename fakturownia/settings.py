@@ -9,6 +9,7 @@ from pathlib import Path
 import os
 import environ
 import dj_database_url
+from ksiegowosc.utils import add_pwa_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -221,7 +222,7 @@ WHITENOISE_AUTOREFRESH = DEBUG
 WHITENOISE_SKIP_COMPRESS_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'zip', 'gz', 'tgz', 'bz2', 'tbz', 'xz', 'br']
 
 # Custom headers dla plików PWA
-WHITENOISE_ADD_HEADERS_FUNCTION = 'ksiegowosc.utils.add_pwa_headers'
+WHITENOISE_ADD_HEADERS_FUNCTION = add_pwa_headers
 
 # =============================================================================
 # EMAIL CONFIGURATION
@@ -688,7 +689,7 @@ if DEBUG:
 
     # PWA Development settings
     PWA_CACHE_SETTINGS['CACHE_EXPIRY'] = 60  # 1 minuta w development
-    
+
     # Dodatkowe logi dla PWA w development
     LOGGING['loggers']['pwa']['level'] = 'DEBUG'
 
@@ -699,33 +700,33 @@ if DEBUG:
 if DEBUG:
     import logging
     logger = logging.getLogger(__name__)
-    
+
     # Sprawdź czy struktura PWA jest poprawna
     pwa_paths = {
         'icons': BASE_DIR / 'static' / 'pwa' / 'icons',
         'splash': BASE_DIR / 'static' / 'pwa' / 'splash',
         'templates': BASE_DIR / 'templates' / 'pwa',
     }
-    
+
     for name, path in pwa_paths.items():
         if not path.exists():
             logger.warning(f"PWA {name} directory missing: {path}")
             logger.info(f"Create it with: mkdir -p {path}")
-    
+
     # Sprawdź kluczowe ikony PWA
     required_icons = [
         'icon-192x192.png',
-        'icon-512x512.png', 
+        'icon-512x512.png',
         'favicon-32x32.png',
         'apple-touch-icon.png'
     ]
-    
+
     missing_icons = []
     for icon in required_icons:
         icon_path = BASE_DIR / 'static' / 'pwa' / 'icons' / icon
         if not icon_path.exists():
             missing_icons.append(icon)
-    
+
     if missing_icons:
         logger.warning(f"Missing PWA icons: {missing_icons}")
         logger.info("Use the PWA icon generator to create them")
