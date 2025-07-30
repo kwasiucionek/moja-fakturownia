@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generator ikon PWA dla Fakturownia</title>
+    
+    <!-- JSZip dla tworzenia archiwów ZIP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .upload-section {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px;
+            border: 3px dashed #007bff;
+            border-radius: 15px;
+            background: #f8f9fa;
+        }
+        
+        .upload-section h2 {
+            color: #007bff;
+            margin-bottom: 15px;
+        }
+        
+        .upload-section p {
+            color: #6c757d;
+            margin-bottom: 20px;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .upload-btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #007bff;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-btn:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .icon-preview {
+            display: none;
+            margin: 30px 0;
+        }
+        
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .icon-item {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .icon-item h4 {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+        
+        .icon-item canvas {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .download-btn {
+            padding: 8px 16px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 14px;
+            display: inline-block;
+            margin-top: 8px;
+        }
+        
+        .download-btn:hover {
+            background: #1e7e34;
+        }
+        
+        .controls {
+            display: none;
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .control-group input,
+        .control-group select {
+            width: 100%;
+            max-width: 300px;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+        }
+        
+        .color-input {
+            width: 60px !important;
+            height: 40px;
+            padding: 0;
+            border: none;
+        }
+        
+        .generate-all-btn {
+            display: none;
+            padding: 15px 30px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 20px auto;
+            display: block;
+        }
+        
+        .generate-all-btn:hover {
+            background: #0056b3;
+        }
+        
+        .download-section {
+            display: none;
+            margin: 30px 0;
+            padding: 20px;
+            background: #e8f5e8;
+            border-radius: 10px;
+            border: 2px solid #28a745;
+        }
+        
+        .download-section h3 {
+            color: #155724;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .download-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        
+        .download-zip-btn {
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .download-zip-btn:hover {
+            background: #1e7e34;
+            transform: translateY(-2px);
+        }
+        
+        .download-individual-btn {
+            padding: 12px 24px;
+            background: #17a2b8;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .download-individual-btn:hover {
+            background: #138496;
+            transform: translateY(-2px);
+        }
+        
+        .path-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+            margin-top: 15px;
+        }
+        
+        .path-info h4 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+        
+        .path-info code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .info-section {
+            margin-top: 40px;
+            padding: 20px;
+            background: #e3f2fd;
+            border-radius: 10px;
+        }
+        
+        .info-section h3 {
+            color: #1976d2;
+            margin-bottom: 15px;
+        }
+        
+        .info-section ul {
+            color: #424242;
+            padding-left: 20px;
+        }
+        
+        .info-section li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Generator ikon PWA</h1>
+        <p style="text-align: center; color: #6c757d; margin-bottom: 30px; font-size: 18px;">
+            Utwórz wszystkie potrzebne ikony dla aplikacji Fakturownia PWA
+        </p>
+        
+        <div class="upload-section">
+            <h2>Wybierz obraz bazowy</h2>
+            <p>Prześlij obraz o rozdzielczości minimum 512x512px (preferowane: kwadratowy, format PNG/JPG)</p>
+            <label for="imageUpload" class="upload-btn">
+                📁 Wybierz plik
+            </label>
+            <input type="file" id="imageUpload" accept="image/*">
+        </div>
+        
+        <div class="controls" id="controls">
+            <h3>Ustawienia ikon</h3>
+            <div class="control-group">
+                <label for="backgroundColor">Kolor tła:</label>
+                <input type="color" id="backgroundColor" value="#007bff" class="color-input">
+            </div>
+            <div class="control-group">
+                <label for="padding">Padding (% wielkości ikony):</label>
+                <input type="range" id="padding" min="0" max="30" value="10">
+                <span id="paddingValue">10%</span>
+            </div>
+            <div class="control-group">
+                <label for="cornerRadius">Zaokrąglenie rogów (%):</label>
+                <input type="range" id="cornerRadius" min="0" max="50" value="15">
+                <span id="cornerRadiusValue">15%</span>
+            </div>
+        </div>
+        
+        <button class="generate-all-btn" id="generateAll" style="display: none;">
+            ✨ Generuj wszystkie ikony
+        </button>
+        
+        <div class="download-section" id="downloadSection">
+            <h3>📥 Pobierz wygenerowane ikony</h3>
+            
+            <div class="download-buttons">
+                <button class="download-zip-btn" id="downloadZip">
+                    📦 Pobierz wszystkie jako ZIP
+                </button>
+                <button class="download-individual-btn" id="downloadIndividual">
+                    📁 Pobierz pojedynczo
+                </button>
+            </div>
+            
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            
+            <div class="path-info">
+                <h4>📂 Ścieżki w projekcie Django:</h4>
+                <p>Umieść pobrane pliki w następującej strukturze:</p>
+                <ul>
+                    <li><code>static/pwa/icons/</code> - wszystkie ikony PWA</li>
+                    <li><code>static/pwa/icons/favicon-32x32.png</code> - favicon 32x32</li>
+                    <li><code>static/pwa/icons/favicon-16x16.png</code> - favicon 16x16</li>
+                    <li><code>static/pwa/icons/apple-touch-icon.png</code> - ikona Apple</li>
+                </ul>
+                <p><strong>Pamiętaj:</strong> Po umieszczeniu plików uruchom <code>python manage.py collectstatic</code></p>
+            </div>
+        </div>
+        
+        <div class="icon-preview" id="iconPreview">
+            <h3>Podgląd ikon:</h3>
+            <div class="preview-grid" id="previewGrid">
+                <!-- Ikony będą generowane dynamicznie -->
+            </div>
+        </div>
+        
+        <div class="info-section">
+            <h3>ℹ️ Wymagane rozmiary ikon PWA</h3>
+            <ul>
+                <li><strong>72x72</strong> - Podstawowa ikona aplikacji</li>
+                <li><strong>96x96</strong> - Ikona na pulpicie</li>
+                <li><strong>128x128</strong> - Chrome Web Store</li>
+                <li><strong>144x144</strong> - Windows Metro</li>
+                <li><strong>152x152</strong> - iPad</li>
+                <li><strong>192x192</strong> - Podstawowa ikona PWA</li>
+                <li><strong>384x384</strong> - Duża ikona PWA</li>
+                <li><strong>512x512</strong> - Splash screen, stores</li>
+            </ul>
+            
+            <h3 style="margin-top: 20px;">📁 Automatyczne zapisywanie:</h3>
+            <ul>
+                <li><strong>📦 ZIP</strong> - pobiera wszystkie ikony w archiwum z odpowiednią strukturą katalogów</li>
+                <li><strong>📁 Pojedynczo</strong> - pobiera każdą ikonę osobno z odpowiednią nazwą</li>
+                <li><strong>Struktura</strong> - pliki będą miały nazwy zgodne ze standardem PWA</li>
+            </ul>
+            
+            <h3 style="margin-top: 20px;">📁 Umieść wygenerowane ikony w:</h3>
+            <p style="background: #f5f5f5; padding: 15px; border-radius: 5px; font-family: monospace;">
+                <strong>Twój_projekt_Django/</strong><br>
+                ├── static/pwa/icons/ <em>(wszystkie ikony PWA)</em><br>
+                ├── manage.py<br>
+                ├── settings.py<br>
+                └── urls.py
+            </p>
+            
+            <h3 style="margin-top: 20px;">⚡ Po pobraniu wykonaj:</h3>
+            <ol style="background: #e3f2fd; padding: 15px; border-radius: 5px;">
+                <li>Umieść pliki w katalogu <code>static/pwa/icons/</code></li>
+                <li>Uruchom: <code>python manage.py collectstatic</code></li>
+                <li>Zrestartuj serwer Django</li>
+                <li>Sprawdź w DevTools → Application → Manifest</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        const iconSizes = [
+            { size: 72, name: 'icon-72x72.png' },
+            { size: 96, name: 'icon-96x96.png' },
+            { size: 128, name: 'icon-128x128.png' },
+            { size: 144, name: 'icon-144x144.png' },
+            { size: 152, name: 'icon-152x152.png' },
+            { size: 192, name: 'icon-192x192.png' },
+            { size: 384, name: 'icon-384x384.png' },
+            { size: 512, name: 'icon-512x512.png' },
+            // Dodatkowe ikony
+            { size: 32, name: 'favicon-32x32.png' },
+            { size: 16, name: 'favicon-16x16.png' },
+            { size: 180, name: 'apple-touch-icon.png' }
+        ];
+        
+        let baseImage = null;
+        let generatedIcons = new Map(); // Przechowuje wygenerowane ikony
+        
+        document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
+        document.getElementById('generateAll').addEventListener('click', generateAllIcons);
+        document.getElementById('downloadZip').addEventListener('click', downloadAsZip);
+        document.getElementById('downloadIndividual').addEventListener('click', downloadIndividually);
+        
+        // Aktualizacja wartości sliderów
+        document.getElementById('padding').addEventListener('input', (e) => {
+            document.getElementById('paddingValue').textContent = e.target.value + '%';
+            if (baseImage) generateAllIcons();
+        });
+        
+        document.getElementById('cornerRadius').addEventListener('input', (e) => {
+            document.getElementById('cornerRadiusValue').textContent = e.target.value + '%';
+            if (baseImage) generateAllIcons();
+        });
+        
+        document.getElementById('backgroundColor').addEventListener('change', () => {
+            if (baseImage) generateAllIcons();
+        });
+        
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    baseImage = img;
+                    document.getElementById('controls').style.display = 'block';
+                    document.getElementById('generateAll').style.display = 'block';
+                    generateAllIcons();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function generateAllIcons() {
+            if (!baseImage) return;
+            
+            const previewGrid = document.getElementById('previewGrid');
+            previewGrid.innerHTML = '';
+            generatedIcons.clear(); // Wyczyść poprzednie ikony
+            
+            iconSizes.forEach(iconData => {
+                const iconElement = createIconElement(iconData);
+                previewGrid.appendChild(iconElement);
+            });
+            
+            document.getElementById('iconPreview').style.display = 'block';
+            document.getElementById('downloadSection').style.display = 'block';
+        }
+        
+        function createIconElement(iconData) {
+            const container = document.createElement('div');
+            container.className = 'icon-item';
+            
+            const title = document.createElement('h4');
+            title.textContent = `${iconData.size}x${iconData.size}`;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = iconData.size;
+            canvas.height = iconData.size;
+            
+            // Renderuj ikonę
+            renderIcon(canvas, iconData.size);
+            
+            const downloadBtn = document.createElement('a');
+            downloadBtn.className = 'download-btn';
+            downloadBtn.textContent = 'Pobierz';
+            downloadBtn.download = iconData.name;
+            
+            // Konwertuj canvas do blob i utwórz URL
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    // Zapisz wygenerowaną ikonę do mapy
+                    generatedIcons.set(iconData.name, blob);
+                    
+                    // Utwórz URL do pobrania
+                    const url = URL.createObjectURL(blob);
+                    downloadBtn.href = url;
+                } else {
+                    console.error(`Nie udało się wygenerować ikony: ${iconData.name}`);
+                    downloadBtn.style.display = 'none';
+                }
+            }, 'image/png', 0.95); // Wysoka jakość PNG
+            
+            container.appendChild(title);
+            container.appendChild(canvas);
+            container.appendChild(downloadBtn);
+            
+            return container;
+        }
+        
+        function renderIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            const padding = parseInt(document.getElementById('padding').value);
+            const cornerRadius = parseInt(document.getElementById('cornerRadius').value);
+            const backgroundColor = document.getElementById('backgroundColor').value;
+            
+            // Wyczyść canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Narysuj tło z zaokrąglonymi rogami
+            const radius = (size * cornerRadius) / 100;
+            drawRoundedRect(ctx, 0, 0, size, size, radius, backgroundColor);
+            
+            // Oblicz rozmiar i pozycję obrazu
+            const paddingPx = (size * padding) / 100;
+            const imageSize = size - (paddingPx * 2);
+            
+            // Narysuj obraz
+            ctx.drawImage(baseImage, paddingPx, paddingPx, imageSize, imageSize);
+        }
+        
+        function drawRoundedRect(ctx, x, y, width, height, radius, fillColor) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+        }
+        
+        // Nowe funkcje do pobierania
+        async function downloadAsZip() {
+            if (generatedIcons.size === 0) {
+                alert('Najpierw wygeneruj ikony!');
+                return;
+            }
+            
+            // Sprawdź czy JSZip jest dostępne
+            if (typeof JSZip === 'undefined') {
+                alert('Biblioteka JSZip nie została załadowana. Użyj opcji "Pobierz pojedynczo".');
+                return;
+            }
+            
+            showProgress();
+            
+            try {
+                const zip = new JSZip();
+                const pwaFolder = zip.folder("static").folder("pwa").folder("icons");
+                
+                let processed = 0;
+                const total = generatedIcons.size;
+                
+                // Dodaj wszystkie ikony do ZIP
+                for (const [filename, blob] of generatedIcons) {
+                    pwaFolder.file(filename, blob);
+                    processed++;
+                    updateProgress((processed / total) * 80); // 80% for adding files
+                }
+                
+                updateProgress(90, "Kompresowanie...");
+                
+                const content = await zip.generateAsync({
+                    type: "blob",
+                    compression: "DEFLATE",
+                    compressionOptions: { level: 6 }
+                });
+                
+                updateProgress(100, "Gotowe!");
+                
+                // Pobierz ZIP
+                const url = URL.createObjectURL(content);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'fakturownia-pwa-icons.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                // Ukryj progress po 2 sekundach
+                setTimeout(hideProgress, 2000);
+                
+                // Pokaż instrukcje
+                showInstallInstructions();
+                
+            } catch (error) {
+                console.error('Błąd podczas tworzenia ZIP:', error);
+                alert('Błąd podczas tworzenia archiwum ZIP: ' + error.message);
+                hideProgress();
+            }
+        }
+        
+        async function downloadIndividually() {
+            if (generatedIcons.size === 0) {
+                alert('Najpierw wygeneruj ikony!');
+                return;
+            }
+            
+            showProgress();
+            let processed = 0;
+            const total = generatedIcons.size;
+            
+            for (const [filename, blob] of generatedIcons) {
+                await downloadSingleFile(blob, filename);
+                processed++;
+                updateProgress((processed / total) * 100);
+                
+                // Małe opóźnienie między pobieraniami
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            updateProgress(100, "Wszystkie pliki pobrane!");
+            setTimeout(hideProgress, 2000);
+            showInstallInstructions();
+        }
+        
+        function downloadSingleFile(blob, filename) {
+            return new Promise((resolve) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                resolve();
+            });
+        }
+        
+        function showProgress() {
+            document.getElementById('progressBar').style.display = 'block';
+            updateProgress(0);
+        }
+        
+        function hideProgress() {
+            document.getElementById('progressBar').style.display = 'none';
+        }
+        
+        function updateProgress(percent, text = null) {
+            const progressFill = document.getElementById('progressFill');
+            progressFill.style.width = percent + '%';
+            progressFill.textContent = text || Math.round(percent) + '%';
+        }
+        
+        function showInstallInstructions() {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
+            
+            const content = document.createElement('div');
+            content.style.cssText = `
+                background: white;
+                padding: 30px;
+                border-radius: 15px;
+                max-width: 600px;
+                max-height: 80vh;
+                overflow-y: auto;
+                margin: 20px;
+            `;
+            
+            content.innerHTML = `
+                <h3 style="color: #28a745; margin-bottom: 20px;">✅ Ikony zostały pobrane!</h3>
+                
+                <h4>📁 Jak zainstalować w projekcie Django:</h4>
+                <ol style="line-height: 1.8; color: #495057;">
+                    <li><strong>Rozpakuj archiwum ZIP</strong> (jeśli pobrano jako ZIP)</li>
+                    <li><strong>Skopiuj</strong> cały katalog <code>static/</code> do głównego katalogu Twojego projektu Django</li>
+                    <li><strong>Struktura powinna wyglądać tak:</strong>
+                        <pre style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; font-size: 13px;">
+Twój_projekt_Django/
+├── manage.py
+├── static/
+│   └── pwa/
+│       └── icons/
+│           ├── icon-72x72.png
+│           ├── icon-96x96.png
+│           ├── icon-128x128.png
+│           ├── icon-144x144.png
+│           ├── icon-152x152.png
+│           ├── icon-192x192.png
+│           ├── icon-384x384.png
+│           ├── icon-512x512.png
+│           ├── favicon-32x32.png
+│           ├── favicon-16x16.png
+│           └── apple-touch-icon.png
+├── settings.py
+└── urls.py</pre>
+                    </li>
+                    <li><strong>Uruchom</strong> polecenie: <code>python manage.py collectstatic</code></li>
+                    <li><strong>Zrestartuj</strong> serwer Django</li>
+                    <li><strong>Sprawdź</strong> w przeglądarce czy ikony się ładują</li>
+                </ol>
+                
+                <h4 style="margin-top: 20px;">🔧 Sprawdzenie instalacji:</h4>
+                <ul style="line-height: 1.6; color: #495057;">
+                    <li>Otwórz DevTools (F12) → Application → Manifest</li>
+                    <li>Sprawdź czy wszystkie ikony się ładują</li>
+                    <li>Spróbuj zainstalować PWA w przeglądarce</li>
+                </ul>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                    <button onclick="this.closest('div').parentElement.remove()" 
+                            style="padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                        Rozumiem, zamknij
+                    </button>
+                </div>
+            `;
+            
+            modal.appendChild(content);
+            document.body.appendChild(modal);
+            
+            // Zamknij po kliknięciu tła
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+        
+        // Dodaj funkcję do pobrania wszystkich ikon jako ZIP
+        function downloadAllAsZip() {
+            // Implementacja z biblioteką JSZip (wymagałaby dodania biblioteki)
+            alert('Funkcja ZIP będzie dostępna w następnej wersji. Na razie pobierz ikony pojedynczo.');
+        }
+    </script>
+</body>
+</html>

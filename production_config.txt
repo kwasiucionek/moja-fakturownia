@@ -1,0 +1,291 @@
+# Konfiguracja Nginx dla PWA Fakturownia
+server {
+    listen 443 ssl http2;
+    server_name fakturownia.example.com;
+    
+    # SSL Configuration (Let's Encrypt)
+    ssl_certificate /etc/letsencrypt/live/fakturownia.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/fakturownia.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    
+    # Security Headers dla PWA
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self'; manifest-src 'self'; worker-src 'self';" always;
+    
+    # PWA specific headers
+    add_header Cache-Control "public, max-age=0, must-revalidate" always;
+    
+    root /var/www/fakturownia;
+    index index.html;
+    
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied expired no-cache no-store private must-revalidate auth;
+    gzip_types
+        application/atom+xml
+        application/geo+json
+        application/javascript
+        application/x-javascript
+        application/json
+        application/ld+json
+        application/manifest+json
+        application/rdf+xml
+        application/rss+xml
+        application/xhtml+xml
+        application/xml
+        font/eot
+        font/otf
+        font/ttf
+        image/svg+xml
+        text/css
+        text/javascript
+        text/plain
+        text/xml;
+    
+    # Service Worker - ważne dla PWA
+    location = /sw.js {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Nie cache'uj Service Worker
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+        
+        # Service Worker headers
+        add_header Service-Worker-Allowed "/" always;
+    }
+    
+    # Manifest.json
+    location = /manifest.json {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        add_header Content-Type "application/manifest+json";
+        add_header Cache-Control "public, max-age=3600"; # 1 godzina
+    }
+    
+    # PWA offline page
+    location = /offline.html {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        add_header Cache-Control "public, max-age=86400"; # 24 godziny
+    }
+    
+    # Pliki statyczne PWA (ikony, etc.)
+    location /static/pwa/ {
+        alias /var/www/fakturownia/static/pwa/;
+        
+        # Cache na długo - pliki się nie zmieniają
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header Vary "Accept-Encoding";
+        
+        # Obsługa różnych formatów obrazów
+        location ~* \.(png|jpg|jpeg|gif|webp|svg|ico)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+    
+    # Pozostałe pliki statyczne
+    location /static/ {
+        alias /var/www/fakturownia/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header Vary "Accept-Encoding";
+    }
+    
+    # Media files
+    location /media/ {
+        alias /var/www/fakturownia/media/;
+        expires 1y;
+        add_header Cache-Control "public";
+    }
+    
+    # Django backend
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Timeout settings
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # Buffer settings
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
+    }
+    
+    # Health check endpoint
+    location /health/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        access_log off;
+    }
+    
+    # Deny access to sensitive files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+    
+    location ~ \.(py|pyc|pyo|pyd|env)$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name fakturownia.example.com;
+    return 301 https://$server_name$request_uri;
+}
+
+# Systemd service dla Gunicorn
+# /etc/systemd/system/fakturownia.service
+[Unit]
+Description=Fakturownia Django App
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+RuntimeDirectory=fakturownia
+WorkingDirectory=/var/www/fakturownia
+ExecStart=/var/www/fakturownia/venv/bin/gunicorn \
+    --bind 127.0.0.1:8000 \
+    --workers 3 \
+    --worker-class gthread \
+    --threads 2 \
+    --worker-connections 1000 \
+    --max-requests 1000 \
+    --max-requests-jitter 100 \
+    --timeout 60 \
+    --keep-alive 2 \
+    --preload \
+    --access-logfile /var/log/fakturownia/access.log \
+    --error-logfile /var/log/fakturownia/error.log \
+    --log-level info \
+    --capture-output \
+    --enable-stdio-inheritance \
+    fakturownia.wsgi:application
+
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=3
+
+Environment=DJANGO_SETTINGS_MODULE=fakturownia.settings
+Environment=PYTHONPATH=/var/www/fakturownia
+Environment=PYTHONUNBUFFERED=1
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/fakturownia/media /var/log/fakturownia
+
+[Install]
+WantedBy=multi-user.target
+
+# Logrotate configuration
+# /etc/logrotate.d/fakturownia
+/var/log/fakturownia/*.log {
+    daily
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    create 0644 www-data www-data
+    postrotate
+        systemctl reload fakturownia
+    endscript
+}
+
+# Cron job dla backupów
+# /etc/cron.d/fakturownia-backup
+# Backup bazy danych codziennie o 2:00
+0 2 * * * www-data cd /var/www/fakturownia && ./venv/bin/python manage.py dbbackup --quiet
+
+# Backup mediów co tydzień
+0 3 * * 0 www-data cd /var/www/fakturownia && ./venv/bin/python manage.py mediabackup --quiet
+
+# Środowiskowe zmienne produkcyjne
+# /var/www/fakturownia/.env
+DEBUG=False
+SECRET_KEY=your-super-secret-production-key-here
+ALLOWED_HOSTS=fakturownia.example.com,www.fakturownia.example.com
+
+# Database
+DATABASE_URL=postgresql://fakturownia_user:password@localhost:5432/fakturownia_db
+
+# Cache (Redis)
+REDIS_URL=redis://localhost:6379/1
+
+# Email
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_PASSWORD=your-app-password
+DEFAULT_FROM_EMAIL=Fakturownia <noreply@fakturownia.example.com>
+
+# Security
+SECURE_SSL_REDIRECT=True
+SECURE_HSTS_SECONDS=31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS=True
+SECURE_HSTS_PRELOAD=True
+SECURE_CONTENT_TYPE_NOSNIFF=True
+SECURE_BROWSER_XSS_FILTER=True
+SECURE_PROXY_SSL_HEADER=True
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
+
+# PWA
+PWA_VERSION=1.2.0
+
+# Monitoring (Sentry)
+SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+
+# Logs
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/fakturownia/django.log
+
+# Backup
+DBBACKUP_STORAGE=storages.backends.s3boto3.S3Boto3Storage
+DBBACKUP_STORAGE_OPTIONS={"bucket_name": "your-backup-bucket", "region_name": "eu-central-1"}
