@@ -4,6 +4,9 @@ URL configuration for fakturownia project - PRODUCTION VERSION
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/5.2/topics/http/urls/
 """
+
+# fakturownia/urls.py
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -15,26 +18,24 @@ from django.db import connection
 from django.core.cache import cache
 import logging
 from django.views.generic.base import RedirectView
+from ksiegowosc import pwa_views  # Import widoków PWA
 
 
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# HEALTH CHECK VIEWS
+# HEALTH CHECK VIEWS (rozszerzone o PWA)
 # =============================================================================
 
 @require_http_methods(["GET"])
 @cache_page(60)  # Cache na 1 minutę
 def health_check(request):
-    """
-    Podstawowy health check endpoint
-    Sprawdza status aplikacji, bazy danych i cache
-    """
     try:
         status = {
             'status': 'healthy',
             'database': 'unknown',
             'cache': 'unknown',
+            'pwa': 'enabled',
         }
 
         # Test bazy danych
@@ -76,16 +77,9 @@ def health_check(request):
 
 @require_http_methods(["GET"])
 def ready_check(request):
-    """
-    Readiness probe - sprawdza czy aplikacja jest gotowa do przyjmowania ruchu
-    """
     try:
-        # Sprawdź kluczowe komponenty
         from ksiegowosc.models import CompanyInfo
-
-        # Test modelu (czy migracje zostały wykonane)
         CompanyInfo.objects.first()
-
         return HttpResponse("ready", content_type="text/plain", status=200)
     except Exception as e:
         logger.error(f"Readiness check failed: {e}")
@@ -94,42 +88,30 @@ def ready_check(request):
 
 @require_http_methods(["GET"])
 def live_check(request):
-    """
-    Liveness probe - sprawdza czy aplikacja żyje
-    """
     return HttpResponse("alive", content_type="text/plain", status=200)
 
-
-# =============================================================================
-# ROBOTS.TXT
-# =============================================================================
 
 @require_http_methods(["GET"])
 @cache_page(3600 * 24)  # Cache na 24 godziny
 def robots_txt(request):
-    """
-    Dynamiczny robots.txt
-    """
-    content = """User-agent: *
+    content = '''User-agent: *
 Disallow: /admin/
 Disallow: /media/private/
 Disallow: /api/
 Allow: /
 
 Sitemap: {protocol}://{domain}/sitemap.xml
-""".format(
+'''.format(
         protocol='https' if request.is_secure() else 'http',
         domain=request.get_host()
     )
-
     return HttpResponse(content, content_type="text/plain")
 
 
 # =============================================================================
-# URL PATTERNS
+# URL PATTERNS (z PWA)
 # =============================================================================
 
-# Dynamiczna ścieżka admin (bezpieczeństwo)
 admin_url = getattr(settings, 'ADMIN_URL', 'admin/')
 
 urlpatterns = [
@@ -138,6 +120,15 @@ urlpatterns = [
 
     # Autoryzacja i uwierzytelnianie
     path('auth/', include('ksiegowosc.auth_urls', namespace='auth')),
+
+    # PWA - WAŻNE: Musi być na głównym poziomie
+    path('manifest.json', pwa_views.pwa_manifest, name='pwa_manifest'),
+    path('sw.js', pwa_views.service_worker, name='service_worker'),
+    path('offline.html', pwa_views.offline_page, name='offline_page'),
+    path('browserconfig.xml', pwa_views.pwa_browserconfig, name='browserconfig'),
+
+    # PWA API
+    path('pwa/', include('ksiegowosc.pwa_urls')),
 
     # Health checks
     path('health/', health_check, name='health_check'),
@@ -180,17 +171,14 @@ if settings.DEBUG:
 # =============================================================================
 
 def custom_404(request, exception):
-    """Custom 404 page"""
     from django.shortcuts import render
     return render(request, '404.html', status=404)
 
 def custom_500(request):
-    """Custom 500 page"""
     from django.shortcuts import render
     return render(request, '500.html', status=500)
 
 def custom_403(request, exception):
-    """Custom 403 page"""
     from django.shortcuts import render
     return render(request, '403.html', status=403)
 
@@ -203,7 +191,6 @@ handler403 = custom_403
 # ADMIN CUSTOMIZATION
 # =============================================================================
 
-# Customizacja admin site
 admin.site.site_header = "Fakturownia - Panel Administracyjny"
 admin.site.site_title = "Fakturownia Admin"
 admin.site.index_title = "Zarządzanie Fakturownią"
@@ -212,7 +199,6 @@ admin.site.index_title = "Zarządzanie Fakturownią"
 # API ENDPOINTS (przyszłe rozszerzenia)
 # =============================================================================
 
-# Placeholder dla przyszłych API endpoints
 api_patterns = [
     # path('invoices/', include('ksiegowosc.api.urls')),
 ]
@@ -221,14 +207,6 @@ if getattr(settings, 'ENABLE_API', False):
     urlpatterns += [
         path('api/v1/', include(api_patterns)),
     ]
-
-# =============================================================================
-# SECURITY HEADERS MIDDLEWARE BYPASS
-# =============================================================================
-
-# Dodaj X-Content-Type-Options dla health checks
-from django.utils.decorators import decorator_from_middleware
-from django.middleware.security import SecurityMiddleware
 
 # =============================================================================
 # DEVELOPMENT ONLY ENDPOINTS
