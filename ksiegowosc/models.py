@@ -597,10 +597,15 @@ class Contractor(models.Model):
         return self.name
 
 class Invoice(models.Model):
+    PAYMENT_STATUS_CHOICES = [
+        ('unpaid', 'Niezapłacona'),
+        ('paid', 'Zapłacona'),
+    ]
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
-    invoice_number = models.CharField(max_length=50, unique=True, verbose_name="Numer faktury")
+    invoice_number = models.CharField(max_length=50, verbose_name="Numer faktury")
     issue_date = models.DateField(default=timezone.now, verbose_name="Data wystawienia")
     sale_date = models.DateField(default=timezone.now, verbose_name="Data sprzedaży")
+    payment_date = models.DateField(verbose_name="Termin płatności")
     contractor = models.ForeignKey(Contractor, on_delete=models.PROTECT, verbose_name="Kontrahent")
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Kwota całkowita")
     payment_method = models.CharField(
@@ -608,6 +613,12 @@ class Invoice(models.Model):
         choices=[('przelew', 'Przelew'), ('gotówka', 'Gotówka')],
         default='przelew',
         verbose_name="Sposób płatności"
+    )
+    payment_status = models.CharField(
+        max_length=10,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='unpaid',
+        verbose_name="Status płatności"
     )
     payment_date = models.DateField(verbose_name="Termin płatności", blank=True, null=True)
     notes = models.TextField(blank=True, null=True, verbose_name="Uwagi")
@@ -626,6 +637,7 @@ class Invoice(models.Model):
         verbose_name = "Faktura"
         verbose_name_plural = "Faktury"
         ordering = ['-issue_date']
+        unique_together = ('user', 'invoice_number')
 
     def __str__(self):
         return f"Faktura {self.invoice_number} dla {self.contractor.name}"
