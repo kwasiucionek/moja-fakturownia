@@ -1,28 +1,28 @@
 {% extends "admin/change_list.html" %}
 
 {% block object-tools-items %}
-    <li>
+
         <a href="{% url 'admin:ksiegowosc_invoice_import_jpk' %}" class="btn btn-primary">
             <i class="fas fa-file-import"></i>
             Importuj z JPK
         </a>
-    </li>
-    <li>
+
+
         <a href="{% url 'admin:ksiegowosc_invoice_export_jpk' %}" class="btn btn-success" id="export-jpk-btn">
             <i class="fas fa-file-export"></i>
             Eksportuj zaznaczone do JPK
         </a>
-    </li>
-    <li>
+
+
         <a href="{% url 'admin:ksiegowosc_invoice_payments_report' %}" class="btn btn-info">
             <i class="fas fa-chart-bar"></i> Raport płatności
         </a>
-    </li>
-    <li>
+
+
         <a href="{% url 'admin:ksiegowosc_invoice_overdue_report' %}" class="btn btn-warning">
             <i class="fas fa-clock"></i> Przeterminowane
         </a>
-    </li>
+
     {{ block.super }}
 {% endblock %}
 
