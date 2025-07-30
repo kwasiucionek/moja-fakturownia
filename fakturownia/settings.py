@@ -651,7 +651,6 @@ LOGGING['loggers']['pwa'] = {
 # Dodatkowe ścieżki statyczne dla PWA
 STATICFILES_DIRS = [
     BASE_DIR / "static",
-    BASE_DIR / "pwa" / "static",  # Jeśli masz oddzielny folder dla PWA
 ]
 
 # Whitelist rozszerzeń plików statycznych
