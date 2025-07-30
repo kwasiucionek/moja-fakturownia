@@ -1,0 +1,121 @@
+{
+  "name": "Fakturownia - System Księgowy",
+  "short_name": "Fakturownia",
+  "description": "System księgowy dla małych przedsiębiorców - faktury, rozliczenia, ZUS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007bff",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "pl",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/static/pwa/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/pwa/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/pwa/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/pwa/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/pwa/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/pwa/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/pwa/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/pwa/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nowa faktura",
+      "short_name": "Faktura",
+      "description": "Utwórz nową fakturę sprzedaży",
+      "url": "/admin/ksiegowosc/invoice/add/",
+      "icons": [
+        {
+          "src": "/static/pwa/icons/shortcut-invoice.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Panel",
+      "description": "Przejdź do dashboardu",
+      "url": "/admin/ksiegowosc/monthlysettlement/dashboard/",
+      "icons": [
+        {
+          "src": "/static/pwa/icons/shortcut-dashboard.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Rozliczenie miesięczne",
+      "short_name": "Rozliczenie",
+      "description": "Oblicz rozliczenie miesięczne",
+      "url": "/admin/ksiegowosc/monthlysettlement/oblicz/",
+      "icons": [
+        {
+          "src": "/static/pwa/icons/shortcut-settlement.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Kalkulator ZUS",
+      "short_name": "ZUS",
+      "description": "Kalkulator składek ZUS",
+      "url": "/admin/ksiegowosc/monthlysettlement/kalkulator-zus/",
+      "icons": [
+        {
+          "src": "/static/pwa/icons/shortcut-zus.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
+}

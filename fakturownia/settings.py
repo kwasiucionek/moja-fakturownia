@@ -543,3 +543,165 @@ AUTHENTICATION_BACKENDS = (
     'social_core.backends.google.GoogleOAuth2',
     'django.contrib.auth.backends.ModelBackend',
 )
+
+
+# ===== DODAJ DO settings.py =====
+
+# =============================================================================
+# PWA CONFIGURATION
+# =============================================================================
+
+# Wersja PWA
+PWA_VERSION = '1.2.0'
+
+# Ustawienia PWA
+PWA_SETTINGS = {
+    'name': 'Fakturownia - System Księgowy',
+    'short_name': 'Fakturownia',
+    'description': 'System księgowy dla małych przedsiębiorców - faktury, rozliczenia, ZUS',
+    'theme_color': '#007bff',
+    'background_color': '#ffffff',
+    'display': 'standalone',
+    'orientation': 'portrait-primary',
+    'start_url': '/',
+    'scope': '/',
+    'lang': 'pl',
+    'categories': ['business', 'finance', 'productivity'],
+    'icons': {
+        'icon-72x72': '/static/pwa/icons/icon-72x72.png',
+        'icon-96x96': '/static/pwa/icons/icon-96x96.png',
+        'icon-128x128': '/static/pwa/icons/icon-128x128.png',
+        'icon-144x144': '/static/pwa/icons/icon-144x144.png',
+        'icon-152x152': '/static/pwa/icons/icon-152x152.png',
+        'icon-192x192': '/static/pwa/icons/icon-192x192.png',
+        'icon-384x384': '/static/pwa/icons/icon-384x384.png',
+        'icon-512x512': '/static/pwa/icons/icon-512x512.png',
+        'apple-touch-icon': '/static/pwa/icons/apple-touch-icon.png',
+        'favicon-32x32': '/static/pwa/icons/favicon-32x32.png',
+        'favicon-16x16': '/static/pwa/icons/favicon-16x16.png',
+    }
+}
+
+# Cache settings dla PWA
+PWA_CACHE_SETTINGS = {
+    'STATIC_CACHE_NAME': 'fakturownia-static-v1.2.0',
+    'DYNAMIC_CACHE_NAME': 'fakturownia-dynamic-v1.2.0',
+    'CACHE_VERSION': '1.2.0',
+    'MAX_CACHE_SIZE': 50 * 1024 * 1024,  # 50MB
+    'CACHE_EXPIRY': 24 * 60 * 60,  # 24 godziny w sekundach
+}
+
+# =============================================================================
+# SECURITY SETTINGS (rozszerzone dla PWA)
+# =============================================================================
+
+# Content Security Policy dla PWA
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = (
+    "'self'",
+    "'unsafe-inline'",  # Potrzebne dla inline scripts w PWA
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+)
+CSP_STYLE_SRC = (
+    "'self'",
+    "'unsafe-inline'",  # Potrzebne dla inline styles
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+    "https://fonts.googleapis.com",
+)
+CSP_IMG_SRC = (
+    "'self'",
+    "data:",  # Dla base64 obrazów
+    "https:",
+)
+CSP_FONT_SRC = (
+    "'self'",
+    "https://fonts.gstatic.com",
+    "https://cdnjs.cloudflare.com",
+)
+CSP_CONNECT_SRC = (
+    "'self'",
+    "https:",  # Dla API calls
+)
+CSP_MANIFEST_SRC = ("'self'",)
+CSP_WORKER_SRC = ("'self'",)
+
+# Dodatowe nagłówki bezpieczeństwa
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+
+# Dodaj do MIDDLEWARE jeśli używasz django-csp
+# 'csp.middleware.CSPMiddleware',
+
+# =============================================================================
+# LOGGING (rozszerzone dla PWA)
+# =============================================================================
+
+# Dodaj do LOGGING['loggers']
+LOGGING['loggers']['pwa'] = {
+    'handlers': ['console'],
+    'level': LOG_LEVEL,
+    'propagate': False,
+}
+
+# =============================================================================
+# STATIC FILES (rozszerzone dla PWA)
+# =============================================================================
+
+# Dodatkowe ścieżki statyczne dla PWA
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+    BASE_DIR / "pwa" / "static",  # Jeśli masz oddzielny folder dla PWA
+]
+
+# Whitelist rozszerzeń plików statycznych
+WHITENOISE_SKIP_COMPRESS_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'zip', 'gz', 'tgz', 'bz2', 'tbz', 'xz', 'br']
+
+# Custom headers dla plików PWA
+WHITENOISE_ADD_HEADERS_FUNCTION = 'ksiegowosc.utils.add_pwa_headers'
+
+# =============================================================================
+# CACHE CONFIGURATION (rozszerzone dla PWA)
+# =============================================================================
+
+# Dodaj cache dla PWA
+CACHES['pwa'] = {
+    'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    'LOCATION': 'pwa-cache',
+    'OPTIONS': {
+        'MAX_ENTRIES': 1000,
+    }
+}
+
+# =============================================================================
+# CUSTOM SETTINGS FOR PWA
+# =============================================================================
+
+# Offline pages
+PWA_OFFLINE_PAGES = [
+    '/',
+    '/auth/login/',
+    '/admin/',
+    '/admin/ksiegowosc/monthlysettlement/dashboard/',
+]
+
+# Funkcje dostępne offline
+PWA_OFFLINE_FEATURES = [
+    'basic_calculator',
+    'cached_data_viewing',
+    'form_data_storage',
+]
+
+# Push notifications (dla przyszłości)
+PWA_PUSH_NOTIFICATIONS = {
+    'enabled': False,
+    'vapid_public_key': '',
+    'vapid_private_key': '',
+    'vapid_subject': 'mailto:admin@fakturownia.pl',
+}
+
+# Background sync (dla przyszłości)
+PWA_BACKGROUND_SYNC = {
+    'enabled': False,
+    'sync_interval': 60 * 15,  # 15 minut
+}

@@ -1,0 +1,463 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brak połączenia - Fakturownia</title>
+    <meta name="theme-color" content="#007bff">
+    
+    <link rel="icon" type="image/png" href="{% static 'pwa/icons/favicon-32x32.png' %}">
+    <link rel="manifest" href="{% url 'pwa_manifest' %}">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .offline-container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .offline-icon {
+            font-size: 80px;
+            margin-bottom: 24px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 18px;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        
+        .offline-features {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            text-align: left;
+        }
+        
+        .offline-features h3 {
+            color: #2c3e50;
+            font-size: 18px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        
+        .feature-list {
+            list-style: none;
+        }
+        
+        .feature-list li {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            color: #555;
+        }
+        
+        .feature-list li::before {
+            content: '✓';
+            color: #27ae60;
+            font-weight: bold;
+            margin-right: 12px;
+            font-size: 16px;
+        }
+        
+        .offline-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 24px;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 140px;
+            justify-content: center;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+            transform: translateY(-2px);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            color: #007bff;
+            border: 2px solid #007bff;
+        }
+        
+        .btn-outline:hover {
+            background: #007bff;
+            color: white;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 24px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .status-offline {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .status-online {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .indicator-offline {
+            background: #c62828;
+        }
+        
+        .indicator-online {
+            background: #2e7d32;
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .footer-info {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #e9ecef;
+            color: #6c757d;
+            font-size: 13px;
+        }
+        
+        .footer-info a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        
+        .footer-info a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Mobile responsive */
+        @media (max-width: 480px) {
+            .offline-container {
+                padding: 24px;
+                margin: 0 16px;
+            }
+            
+            .offline-icon {
+                font-size: 64px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .subtitle {
+                font-size: 16px;
+            }
+            
+            .offline-actions {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+        
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            }
+            
+            .offline-container {
+                background: #2c3e50;
+                color: #ecf0f1;
+            }
+            
+            h1 {
+                color: #ecf0f1;
+            }
+            
+            .subtitle {
+                color: #bdc3c7;
+            }
+            
+            .offline-features {
+                background: #34495e;
+            }
+            
+            .offline-features h3 {
+                color: #ecf0f1;
+            }
+            
+            .feature-list li {
+                color: #bdc3c7;
+            }
+            
+            .footer-info {
+                color: #95a5a6;
+                border-top-color: #34495e;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <div class="offline-icon">📡</div>
+        
+        <h1>Brak połączenia z internetem</h1>
+        <p class="subtitle">
+            Nie można załadować tej strony, ale niektóre funkcje nadal mogą być dostępne.
+        </p>
+        
+        <div class="offline-features">
+            <h3>Dostępne offline:</h3>
+            <ul class="feature-list">
+                <li>Przeglądanie zapisanych faktur</li>
+                <li>Kalkulator składek ZUS</li>
+                <li>Podstawowe funkcje nawigacji</li>
+                <li>Dane z ostatniej synchronizacji</li>
+            </ul>
+        </div>
+        
+        <div class="connection-status" id="connectionStatus">
+            <div class="status-indicator indicator-offline" id="statusIndicator"></div>
+            <span id="statusText">Sprawdzanie połączenia...</span>
+        </div>
+        
+        <div class="offline-actions">
+            <button class="btn btn-primary" onclick="tryReload()">
+                🔄 Spróbuj ponownie
+            </button>
+            
+            {% if user.is_authenticated %}
+            <a href="{% url 'admin:ksiegowosc_monthlysettlement_dashboard' %}" class="btn btn-outline">
+                📊 Dashboard
+            </a>
+            {% else %}
+            <a href="{% url 'auth:login' %}" class="btn btn-outline">
+                🔐 Logowanie
+            </a>
+            {% endif %}
+            
+            <button class="btn btn-secondary" onclick="showCacheInfo()">
+                ℹ️ Info o cache
+            </button>
+        </div>
+        
+        <div class="footer-info">
+            <p>
+                <strong>Fakturownia PWA</strong> v1.2.0<br>
+                Pracujesz w trybie offline. Dane będą zsynchronizowane po przywróceniu połączenia.
+            </p>
+            {% if user.is_authenticated %}
+            <p>Zalogowany jako: <strong>{{ user.username }}</strong></p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Sprawdzanie statusu połączenia
+        function updateConnectionStatus() {
+            const statusDiv = document.getElementById('connectionStatus');
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            if (navigator.onLine) {
+                statusDiv.className = 'connection-status status-online';
+                indicator.className = 'status-indicator indicator-online';
+                statusText.textContent = 'Połączenie przywrócone!';
+                
+                // Auto-reload po 2 sekundach
+                setTimeout(() => {
+                    tryReload();
+                }, 2000);
+            } else {
+                statusDiv.className = 'connection-status status-offline';
+                indicator.className = 'status-indicator indicator-offline';
+                statusText.textContent = 'Brak połączenia z internetem';
+            }
+        }
+        
+        // Event listenery dla stanu połączenia
+        window.addEventListener('online', updateConnectionStatus);
+        window.addEventListener('offline', updateConnectionStatus);
+        
+        // Inicjalne sprawdzenie
+        updateConnectionStatus();
+        
+        // Funkcja przeładowania strony
+        function tryReload() {
+            // Sprawdź połączenie przez fetch
+            fetch('/', { method: 'HEAD', cache: 'no-cache' })
+                .then(() => {
+                    window.location.reload();
+                })
+                .catch(() => {
+                    const statusText = document.getElementById('statusText');
+                    statusText.textContent = 'Nadal brak połączenia...';
+                    
+                    // Spróbuj ponownie za 5 sekund
+                    setTimeout(() => {
+                        updateConnectionStatus();
+                    }, 5000);
+                });
+        }
+        
+        // Informacje o cache
+        function showCacheInfo() {
+            if ('caches' in window) {
+                caches.keys().then(cacheNames => {
+                    const totalCaches = cacheNames.length;
+                    alert(`Aplikacja ma ${totalCaches} cache'ów z danymi offline.\n\nCache'y: ${cacheNames.join(', ')}`);
+                });
+            } else {
+                alert('Cache API nie jest dostępne w tej przeglądarce.');
+            }
+        }
+        
+        // Periodyczne sprawdzanie połączenia
+        setInterval(() => {
+            if (!navigator.onLine) {
+                // Spróbuj ping do serwera
+                fetch('/pwa/health/', { 
+                    method: 'GET', 
+                    cache: 'no-cache',
+                    signal: AbortSignal.timeout(5000) // 5 sekund timeout
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Połączenie jest dostępne, ale navigator.onLine może być nieprecyzyjny
+                        if (!navigator.onLine) {
+                            // Ręcznie wywołaj event online
+                            window.dispatchEvent(new Event('online'));
+                        }
+                    }
+                })
+                .catch(() => {
+                    // Brak połączenia potwierdzone
+                });
+            }
+        }, 10000); // Sprawdzaj co 10 sekund
+        
+        // Obsługa gestów na urządzeniach mobilnych
+        let startY = 0;
+        let startX = 0;
+        
+        document.addEventListener('touchstart', e => {
+            startY = e.touches[0].clientY;
+            startX = e.touches[0].clientX;
+        });
+        
+        document.addEventListener('touchmove', e => {
+            e.preventDefault(); // Zapobiega scroll podczas pull-to-refresh
+        }, { passive: false });
+        
+        document.addEventListener('touchend', e => {
+            const endY = e.changedTouches[0].clientY;
+            const endX = e.changedTouches[0].clientX;
+            
+            // Pull to refresh gesture
+            if (startY < 50 && endY > startY + 100 && Math.abs(endX - startX) < 50) {
+                tryReload();
+            }
+        });
+        
+        // Informacja o gesture
+        console.log('💡 Tip: Przeciągnij w dół aby odświeżyć stronę');
+        
+        // Log dla debugowania
+        console.log('Offline page loaded successfully');
+        console.log('User agent:', navigator.userAgent);
+        console.log('Online status:', navigator.onLine);
+        console.log('Service Worker support:', 'serviceWorker' in navigator);
+    </script>
+</body>
+</html>

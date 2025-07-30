@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="application-name" content="Fakturownia">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Fakturownia">
+    <meta name="description" content="System księgowy dla małych przedsiębiorców - faktury, rozliczenia, ZUS">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="msapplication-config" content="{% static 'pwa/browserconfig.xml' %}">
+    <meta name="msapplication-TileColor" content="#007bff">
+    <meta name="msapplication-tap-highlight" content="no">
+    <meta name="theme-color" content="#007bff">
+    
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Fakturownia - System Księgowy">
+    <meta property="og:description" content="Kompletny system księgowy dla małych przedsiębiorców">
+    <meta property="og:site_name" content="Fakturownia">
+    <meta property="og:url" content="{{ request.build_absolute_uri }}">
+    <meta property="og:image" content="{% static 'pwa/icons/icon-512x512.png' %}">
+    
+    <title>{% block title %}Fakturownia - System Księgowy{% endblock %}</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{% url 'pwa_manifest' %}">
+    
+    <!-- Favicons and Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'pwa/icons/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'pwa/icons/favicon-16x16.png' %}">
+    <link rel="shortcut icon" href="{% static 'pwa/icons/favicon.ico' %}">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="{% static 'pwa/icons/apple-touch-icon.png' %}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{% static 'pwa/icons/apple-touch-icon-152x152.png' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'pwa/icons/apple-touch-icon-180x180.png' %}">
+    <link rel="apple-touch-icon" sizes="167x167" href="{% static 'pwa/icons/apple-touch-icon-167x167.png' %}">
+    
+    <!-- Apple Splash Screens -->
+    <link rel="apple-touch-startup-image" href="{% static 'pwa/splash/apple-splash-2048-2732.jpg' %}" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="{% static 'pwa/splash/apple-splash-1668-2388.jpg' %}" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="{% static 'pwa/splash/apple-splash-1536-2048.jpg' %}" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="{% static 'pwa/splash/apple-splash-1125-2436.jpg' %}" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="{% static 'pwa/splash/apple-splash-1242-2208.jpg' %}" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="{% static 'pwa/splash/apple-splash-750-1334.jpg' %}" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="{% static 'pwa/splash/apple-splash-640-1136.jpg' %}" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    
+    <!-- CSS -->
+    {% block extra_css %}
+    <link rel="stylesheet" href="{% static 'admin/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'jazzmin/css/adminlte.min.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% endblock %}
+    
+    <!-- PWA Custom Styles -->
+    <style>
+        /* PWA Specific Styles */
+        @media all and (display-mode: standalone) {
+            body {
+                -webkit-user-select: none;
+                -webkit-touch-callout: none;
+            }
+            
+            /* Hide browser UI elements in standalone mode */
+            .pwa-hidden {
+                display: none !important;
+            }
+            
+            /* Add padding for iOS safe areas */
+            body {
+                padding-top: env(safe-area-inset-top);
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+        }
+        
+        /* Install prompt styles */
+        .install-prompt {
+            position: fixed;
+            bottom: 16px;
+            left: 16px;
+            right: 16px;
+            background: #007bff;
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .install-prompt.show {
+            display: flex;
+        }
+        
+        .install-prompt button {
+            background: white;
+            color: #007bff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        
+        .install-prompt .close-btn {
+            background: transparent;
+            color: white;
+            font-size: 20px;
+            padding: 4px 8px;
+        }
+        
+        /* Offline indicator */
+        .offline-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #dc3545;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            z-index: 10000;
+            display: none;
+        }
+        
+        .offline-indicator.show {
+            display: block;
+        }
+        
+        /* Update available notification */
+        .update-notification {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            background: #28a745;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 9999;
+            display: none;
+            max-width: 300px;
+        }
+        
+        .update-notification.show {
+            display: block;
+        }
+        
+        .update-notification button {
+            background: white;
+            color: #28a745;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 8px;
+            margin-right: 8px;
+        }
+        
+        /* Loading spinner for offline/slow connections */
+        .pwa-loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            z-index: 10001;
+            display: none;
+            text-align: center;
+        }
+        
+        .pwa-loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Quick actions floating button */
+        .pwa-fab {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            background: #007bff;
+            border-radius: 50%;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+        
+        .pwa-fab:hover {
+            background: #0056b3;
+            transform: scale(1.1);
+        }
+        
+        .pwa-fab-menu {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            padding: 8px;
+            display: none;
+            z-index: 999;
+            min-width: 200px;
+        }
+        
+        .pwa-fab-menu.show {
+            display: block;
+        }
+        
+        .pwa-fab-item {
+            display: block;
+            padding: 12px 16px;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        
+        .pwa-fab-item:hover {
+            background: #f8f9fa;
+        }
+        
+        /* iOS specific fixes */
+        @supports (-webkit-touch-callout: none) {
+            .ios-safe-area-bottom {
+                padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
+            }
+        }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="{% if request.user.is_authenticated %}sidebar-mini layout-fixed{% endif %}">
+
+    <!-- Offline Indicator -->
+    <div id="offlineIndicator" class="offline-indicator">
+        <i class="fas fa-wifi"></i> Brak połączenia z internetem
+    </div>
+    
+    <!-- Update Notification -->
+    <div id="updateNotification" class="update-notification">
+        <div><i class="fas fa-download"></i> Dostępna jest nowa wersja aplikacji</div>
+        <button onclick="updateApp()">Aktualizuj</button>
+        <button onclick="dismissUpdate()">Później</button>
+    </div>
+    
+    <!-- Install Prompt -->
+    <div id="installPrompt" class="install-prompt">
+        <div>
+            <i class="fas fa-mobile-alt"></i>
+            <strong>Zainstaluj Fakturownia</strong><br>
+            Otrzymaj szybszy dostęp i pracuj offline
+        </div>
+        <div>
+            <button onclick="installApp()">Zainstaluj</button>
+            <button class="close-btn" onclick="dismissInstall()">&times;</button>
+        </div>
+    </div>
+    
+    <!-- Loading Spinner -->
+    <div id="pwaLoading" class="pwa-loading">
+        <div class="spinner"></div>
+        <div>Ładowanie...</div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="wrapper">
+        {% block content %}
+        <div class="content-wrapper">
+            <section class="content-header">
+                <div class="container-fluid">
+                    <h1>{% block page_title %}Fakturownia{% endblock %}</h1>
+                </div>
+            </section>
+            
+            <section class="content">
+                <div class="container-fluid">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="close" data-dismiss="alert">
+                                    <span>&times;</span>
+                                </button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    {% block main_content %}{% endblock %}
+                </div>
+            </section>
+        </div>
+        {% endblock %}
+    </div>
+
+    <!-- Quick Actions FAB -->
+    {% if request.user.is_authenticated %}
+    <button class="pwa-fab" onclick="toggleFabMenu()" title="Szybkie akcje">
+        <i class="fas fa-plus"></i>
+    </button>
+    
+    <div id="fabMenu" class="pwa-fab-menu">
+        <a href="{% url 'admin:ksiegowosc_invoice_add' %}" class="pwa-fab-item">
+            <i class="fas fa-file-invoice"></i> Nowa faktura
+        </a>
+        <a href="{% url 'admin:ksiegowosc_payment_add' %}" class="pwa-fab-item">
+            <i class="fas fa-money-bill"></i> Dodaj płatność
+        </a>
+        <a href="{% url 'admin:ksiegowosc_monthlysettlement_calculate' %}" class="pwa-fab-item">
+            <i class="fas fa-calculator"></i> Rozliczenie
+        </a>
+        <a href="{% url 'admin:ksiegowosc_monthlysettlement_dashboard' %}" class="pwa-fab-item">
+            <i class="fas fa-chart-pie"></i> Dashboard
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- JavaScript -->
+    {% block javascript %}
+    <script src="{% static 'admin/js/vendor/jquery/jquery.js' %}"></script>
+    <script src="{% static 'jazzmin/js/adminlte.min.js' %}"></script>
+    {% endblock %}
+    
+    <!-- PWA JavaScript -->
+    <script>
+        // PWA Variables
+        let deferredPrompt;
+        let swRegistration;
+        let isOnline = navigator.onLine;
+        let updateAvailable = false;
+        
+        // Initialize PWA
+        document.addEventListener('DOMContentLoaded', function() {
+            initializePWA();
+        });
+        
+        function initializePWA() {
+            // Register Service Worker
+            if ('serviceWorker' in navigator) {
+                registerServiceWorker();
+            }
+            
+            // Setup event listeners
+            setupEventListeners();
+            
+            // Check if app is installed
+            if (window.matchMedia('(display-mode: standalone)').matches) {
+                console.log('PWA jest zainstalowana');
+                document.body.classList.add('pwa-installed');
+            }
+            
+            // Check online status
+            updateOnlineStatus();
+        }
+        
+        async function registerServiceWorker() {
+            try {
+                swRegistration = await navigator.serviceWorker.register('/sw.js', {
+                    scope: '/'
+                });
+                
+                console.log('Service Worker zarejestrowany:', swRegistration);
+                
+                // Check for updates
+                swRegistration.addEventListener('updatefound', () => {
+                    const newWorker = swRegistration.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            showUpdateNotification();
+                        }
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Błąd rejestracji Service Worker:', error);
+            }
+        }
+        
+        function setupEventListeners() {
+            // Install prompt
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                showInstallPrompt();
+            });
+            
+            // App installed
+            window.addEventListener('appinstalled', () => {
+                console.log('PWA zostało zainstalowane');
+                hideInstallPrompt();
+                showNotification('Aplikacja została zainstalowana!', 'success');
+            });
+            
+            // Online/Offline status
+            window.addEventListener('online', () => {
+                isOnline = true;
+                updateOnlineStatus();
+                showNotification('Połączenie z internetem zostało przywrócone', 'success');
+            });
+            
+            window.addEventListener('offline', () => {
+                isOnline = false;
+                updateOnlineStatus();
+                showNotification('Brak połączenia z internetem. Część funkcji może być niedostępna.', 'warning');
+            });
+            
+            // Visibility change (app focus)
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && swRegistration) {
+                    swRegistration.update();
+                }
+            });
+            
+            // Close FAB menu on outside click
+            document.addEventListener('click', (e) => {
+                const fabMenu = document.getElementById('fabMenu');
+                const fab = document.querySelector('.pwa-fab');
+                
+                if (fabMenu && !fabMenu.contains(e.target) && !fab.contains(e.target)) {
+                    fabMenu.classList.remove('show');
+                }
+            });
+        }
+        
+        function showInstallPrompt() {
+            const installPrompt = document.getElementById('installPrompt');
+            
+            // Don't show if already dismissed recently
+            if (localStorage.getItem('installPromptDismissed')) {
+                const dismissedTime = parseInt(localStorage.getItem('installPromptDismissed'));
+                const now = Date.now();
+                const dayInMs = 24 * 60 * 60 * 1000;
+                
+                if (now - dismissedTime < dayInMs * 7) { // 7 days
+                    return;
+                }
+            }
+            
+            if (installPrompt) {
+                installPrompt.classList.add('show');
+            }
+        }
+        
+        function hideInstallPrompt() {
+            const installPrompt = document.getElementById('installPrompt');
+            if (installPrompt) {
+                installPrompt.classList.remove('show');
+            }
+        }
+        
+        function showUpdateNotification() {
+            updateAvailable = true;
+            const updateNotification = document.getElementById('updateNotification');
+            if (updateNotification) {
+                updateNotification.classList.add('show');
+            }
+        }
+        
+        function updateOnlineStatus() {
+            const offlineIndicator = document.getElementById('offlineIndicator');
+            
+            if (offlineIndicator) {
+                if (isOnline) {
+                    offlineIndicator.classList.remove('show');
+                } else {
+                    offlineIndicator.classList.add('show');
+                }
+            }
+        }
+        
+        function showLoading() {
+            const loading = document.getElementById('pwaLoading');
+            if (loading) {
+                loading.classList.add('show');
+            }
+        }
+        
+        function hideLoading() {
+            const loading = document.getElementById('pwaLoading');
+            if (loading) {
+                loading.classList.remove('show');
+            }
+        }
+        
+        // PWA Functions
+        async function installApp() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const result = await deferredPrompt.userChoice;
+                
+                if (result.outcome === 'accepted') {
+                    console.log('Użytkownik zaakceptował instalację');
+                } else {
+                    console.log('Użytkownik odrzucił instalację');
+                }
+                
+                deferredPrompt = null;
+                hideInstallPrompt();
+            }
+        }
+        
+        function dismissInstall() {
+            hideInstallPrompt();
+            localStorage.setItem('installPromptDismissed', Date.now().toString());
+        }
+        
+        function updateApp() {
+            if (updateAvailable && swRegistration && swRegistration.waiting) {
+                swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                window.location.reload();
+            }
+        }
+        
+        function dismissUpdate() {
+            const updateNotification = document.getElementById('updateNotification');
+            if (updateNotification) {
+                updateNotification.classList.remove('show');
+            }
+        }
+        
+        function toggleFabMenu() {
+            const fabMenu = document.getElementById('fabMenu');
+            if (fabMenu) {
+                fabMenu.classList.toggle('show');
+            }
+        }
+        
+        function showNotification(message, type = 'info') {
+            // Use browser notification if permission granted
+            if (Notification.permission === 'granted') {
+                new Notification('Fakturownia', {
+                    body: message,
+                    icon: '{% static "pwa/icons/icon-192x192.png" %}',
+                    badge: '{% static "pwa/icons/badge-72x72.png" %}',
+                    tag: 'fakturownia-notification'
+                });
+            }
+            
+            // Also show in-app notification
+            const alertClass = type === 'success' ? 'alert-success' : 
+                             type === 'warning' ? 'alert-warning' : 
+                             type === 'error' ? 'alert-danger' : 'alert-info';
+            
+            const notification = document.createElement('div');
+            notification.className = `alert ${alertClass} alert-dismissible fade show`;
+            notification.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; max-width: 350px;';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="close" onclick="this.parentElement.remove()">
+                    <span>&times;</span>
+                </button>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+        
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            setTimeout(() => {
+                Notification.requestPermission();
+            }, 5000);
+        }
+        
+        // Handle form submissions with loading indicator
+        document.addEventListener('submit', function(e) {
+            if (!isOnline) {
+                e.preventDefault();
+                showNotification('Brak połączenia z internetem. Nie można wysłać danych.', 'error');
+                return;
+            }
+            
+            showLoading();
+            
+            // Hide loading after 10 seconds max
+            setTimeout(() => {
+                hideLoading();
+            }, 10000);
+        });
+        
+        // Hide loading on page load
+        window.addEventListener('load', () => {
+            hideLoading();
+        });
+        
+        // Add iOS specific handling
+        if (navigator.platform && /iPad|iPhone|iPod/.test(navigator.platform)) {
+            document.body.classList.add('ios-device');
+            
+            // Add safe area classes
+            if (window.matchMedia('(display-mode: standalone)').matches) {
+                document.body.classList.add('ios-safe-area-bottom');
+            }
+        }
+        
+        console.log('PWA zainicializowane pomyślnie');
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
