@@ -1,0 +1,369 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="application-name" content="Fakturownia">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Fakturownia">
+    <meta name="description" content="System księgowy dla małych przedsiębiorców - faktury, rozliczenia, ZUS">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="msapplication-config" content="{% url 'browserconfig' %}">
+    <meta name="msapplication-TileColor" content="#007bff">
+    <meta name="msapplication-tap-highlight" content="no">
+    <meta name="theme-color" content="#007bff">
+    
+    <title>{% block title %}Fakturownia - System Księgowy{% endblock %}</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{% url 'pwa_manifest' %}">
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'pwa/icons/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'pwa/icons/favicon-16x16.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'pwa/icons/apple-touch-icon.png' %}">
+    
+    <!-- CSS -->
+    {% block extra_css %}
+    <link rel="stylesheet" href="{% static 'jazzmin/css/adminlte.min.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% endblock %}
+    
+    <!-- PWA Styles -->
+    <style>
+        .pwa-install-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            padding: 16px;
+            text-align: center;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 9999;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .pwa-install-banner.show {
+            transform: translateY(0);
+        }
+        
+        .pwa-install-banner button {
+            background: white;
+            color: #007bff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 0 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .pwa-install-banner button:hover {
+            background: #f8f9fa;
+            transform: translateY(-1px);
+        }
+        
+        .pwa-offline-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #dc3545;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            z-index: 10000;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .pwa-offline-indicator.show {
+            transform: translateY(0);
+        }
+        
+        .pwa-update-banner {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 9999;
+            transform: translateX(calc(100% + 40px));
+            transition: transform 0.3s ease;
+            max-width: 300px;
+        }
+        
+        .pwa-update-banner.show {
+            transform: translateX(0);
+        }
+        
+        .pwa-update-banner button {
+            background: white;
+            color: #28a745;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 8px;
+            margin-right: 8px;
+        }
+        
+        @media all and (display-mode: standalone) {
+            body {
+                padding-top: env(safe-area-inset-top);
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+        }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="hold-transition {% if request.user.is_authenticated %}sidebar-mini layout-fixed{% endif %}">
+
+    <!-- PWA Install Banner -->
+    <div id="pwaInstallBanner" class="pwa-install-banner">
+        <div style="margin-bottom: 8px;">
+            <i class="fas fa-mobile-alt"></i>
+            <strong>Zainstaluj aplikację Fakturownia</strong>
+        </div>
+        <div style="font-size: 14px; margin-bottom: 12px;">
+            Otrzymaj szybszy dostęp i możliwość pracy offline
+        </div>
+        <button onclick="installPWA()" id="installButton">
+            <i class="fas fa-download"></i> Zainstaluj
+        </button>
+        <button onclick="dismissInstallBanner()" style="background: transparent; color: white; border: 1px solid white;">
+            Może później
+        </button>
+    </div>
+    
+    <!-- Offline Indicator -->
+    <div id="offlineIndicator" class="pwa-offline-indicator">
+        <i class="fas fa-wifi"></i> Brak połączenia z internetem - niektóre funkcje mogą być niedostępne
+    </div>
+    
+    <!-- Update Banner -->
+    <div id="updateBanner" class="pwa-update-banner">
+        <div><i class="fas fa-sync-alt"></i> <strong>Dostępna aktualizacja</strong></div>
+        <div style="font-size: 13px; margin: 4px 0;">Nowa wersja aplikacji jest gotowa</div>
+        <button onclick="updatePWA()">Aktualizuj teraz</button>
+        <button onclick="dismissUpdate()">Później</button>
+    </div>
+    
+    <div class="wrapper">
+        {% block content %}
+        <!-- Główna zawartość strony -->
+        {% endblock %}
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{% static 'admin/js/vendor/jquery/jquery.js' %}"></script>
+    <script src="{% static 'jazzmin/js/adminlte.min.js' %}"></script>
+    
+    <!-- PWA JavaScript -->
+    <script>
+        let deferredPrompt;
+        let swRegistration;
+        
+        // Inicjalizacja PWA
+        document.addEventListener('DOMContentLoaded', function() {
+            initializePWA();
+        });
+        
+        function initializePWA() {
+            // Rejestracja Service Worker
+            if ('serviceWorker' in navigator) {
+                registerServiceWorker();
+            }
+            
+            // Event listeners
+            setupPWAEventListeners();
+            
+            // Sprawdzenie statusu online/offline
+            updateOnlineStatus();
+        }
+        
+        async function registerServiceWorker() {
+            try {
+                swRegistration = await navigator.serviceWorker.register('/sw.js');
+                console.log('Service Worker zarejestrowany:', swRegistration.scope);
+                
+                // Sprawdzenie aktualizacji
+                swRegistration.addEventListener('updatefound', () => {
+                    const newWorker = swRegistration.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            showUpdateBanner();
+                        }
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Błąd rejestracji Service Worker:', error);
+            }
+        }
+        
+        function setupPWAEventListeners() {
+            // Install prompt
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                showInstallBanner();
+            });
+            
+            // App installed
+            window.addEventListener('appinstalled', () => {
+                console.log('PWA zainstalowane');
+                hideInstallBanner();
+                showToast('Aplikacja została pomyślnie zainstalowana!', 'success');
+            });
+            
+            // Online/Offline events
+            window.addEventListener('online', () => {
+                updateOnlineStatus();
+                showToast('Połączenie z internetem zostało przywrócone', 'success');
+            });
+            
+            window.addEventListener('offline', () => {
+                updateOnlineStatus();
+                showToast('Brak połączenia z internetem', 'warning');
+            });
+        }
+        
+        function showInstallBanner() {
+            const banner = document.getElementById('pwaInstallBanner');
+            if (banner && !isInstallDismissed()) {
+                banner.classList.add('show');
+            }
+        }
+        
+        function hideInstallBanner() {
+            const banner = document.getElementById('pwaInstallBanner');
+            if (banner) {
+                banner.classList.remove('show');
+            }
+        }
+        
+        function showUpdateBanner() {
+            const banner = document.getElementById('updateBanner');
+            if (banner) {
+                banner.classList.add('show');
+            }
+        }
+        
+        function updateOnlineStatus() {
+            const indicator = document.getElementById('offlineIndicator');
+            if (indicator) {
+                if (navigator.onLine) {
+                    indicator.classList.remove('show');
+                } else {
+                    indicator.classList.add('show');
+                }
+            }
+        }
+        
+        async function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const result = await deferredPrompt.userChoice;
+                
+                if (result.outcome === 'accepted') {
+                    console.log('Instalacja zaakceptowana');
+                } else {
+                    console.log('Instalacja odrzucona');
+                }
+                
+                deferredPrompt = null;
+                hideInstallBanner();
+            }
+        }
+        
+        function dismissInstallBanner() {
+            hideInstallBanner();
+            localStorage.setItem('installPromptDismissed', Date.now());
+        }
+        
+        function isInstallDismissed() {
+            const dismissed = localStorage.getItem('installPromptDismissed');
+            if (!dismissed) return false;
+            
+            const dismissedTime = parseInt(dismissed);
+            const now = Date.now();
+            const sevenDays = 7 * 24 * 60 * 60 * 1000;
+            
+            return (now - dismissedTime) < sevenDays;
+        }
+        
+        function updatePWA() {
+            if (swRegistration && swRegistration.waiting) {
+                swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                window.location.reload();
+            }
+        }
+        
+        function dismissUpdate() {
+            const banner = document.getElementById('updateBanner');
+            if (banner) {
+                banner.classList.remove('show');
+            }
+        }
+        
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type} alert-dismissible`;
+            toast.style.cssText = `
+                position: fixed; 
+                top: 20px; 
+                right: 20px; 
+                z-index: 9999; 
+                max-width: 350px;
+                animation: slideIn 0.3s ease;
+            `;
+            toast.innerHTML = `
+                ${message}
+                <button type="button" class="close" onclick="this.parentElement.remove()">
+                    <span>&times;</span>
+                </button>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+            }, 5000);
+        }
+        
+        // Dodaj style dla animacji
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        console.log('PWA zainicjalizowane pomyślnie');
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
