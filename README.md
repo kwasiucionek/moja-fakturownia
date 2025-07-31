@@ -1,28 +1,47 @@
 # 📊 Moja Fakturownia
 
-Kompleksowy system księgowy dla jednoosobowych działalności gospodarczych. Aplikacja Django z panelem administracyjnym umożliwiającym zarządzanie fakturami, kontrahentami oraz automatyczne rozliczenia podatkowe i składki ZUS.
+Kompleksowy system księgowy dla jednoosobowych działalności gospodarczych. Aplikacja Django z panelem administracyjnym umożliwiającym zarządzanie fakturami, kosztami, płatnościami oraz automatyczne rozliczenia podatkowe i składki ZUS. Aplikacja jest również Progresywną Aplikacją Webową (PWA), co umożliwia jej instalację na urządzeniach i pracę w trybie offline.
 
 ## ✨ Funkcjonalności
 
-### 📄 Zarządzanie Fakturami
+### 📈 Zarządzanie Sprzedażą
 - **Wystawianie faktur** z automatyczną numeracją
-- **Faktury korygujące** z powiązaniem do oryginalnych dokumentów
-- **Generowanie PDF** z profesjonalnymi szablonami
-- **Import/Export JPK_FA** - automatyczny import z plików XML
-- **Pozycje na fakturach** z obliczaniem wartości
+- **Faktury korygujące** z powiązaniem do oryginalnych dokumentów i automatycznym wykrywaniem stanu "było" / "powinno być"
+- **Generowanie PDF** z profesjonalnymi szablonami dla faktur i korekt
+- **Import/Export JPK_FA** - automatyczny import faktur sprzedaży z plików XML oraz eksport zaznaczonych dokumentów
+- **Zarządzanie pozycjami na fakturach** z automatycznym obliczaniem wartości
 
-### 👥 Kontrahenci
-- Zarządzanie bazą kontrahentów
-- Automatyczne tworzenie podczas importu JPK
-- Walidacja numerów NIP
-- Pełne dane adresowe
+### 📉 Zarządzanie Kosztami
+- **Rejestracja faktur zakupu** z podziałem na koszty uzyskania przychodu i VAT do odliczenia
+- **Kategorie kosztów** dla lepszej analityki i organizacji wydatków
+- **Raporty kosztów** - generowanie szczegółowych raportów kosztów w wybranym okresie oraz analiza po kategoriach
+- **Śledzenie płatności za koszty** ze statusami (opłacona, przeterminowana, oczekuje)
 
-### 💰 Rozliczenia Podatkowe
-- **Rozliczenia miesięczne** z automatycznym obliczaniem podatku
-- **Rozliczenia roczne** z wykrywaniem dopłat/zwrotów
-- **Kalkulator składek ZUS** z aktualnymi stawkami
-- **Składki społeczne, zdrowotne i Fundusz Pracy**
-- Obsługa preferencyjnych składek i Małego ZUS Plus
+### 💰 Płatności i Rozliczenia
+- **Śledzenie płatności** - dedykowany moduł do rejestrowania wpłat od klientów i powiązania ich z fakturami
+- **Automatyczny status płatności** (opłacona, częściowo opłacona, przeterminowana, nieopłacona)
+- **Rozliczenia miesięczne** z automatycznym obliczaniem podatku ryczałtowego
+- **Import JPK_EWP** do automatycznego uzupełniania przychodów w rozliczeniach miesięcznych
+- **Rozliczenia roczne** z automatycznym wykrywaniem dopłat/zwrotów podatku
+- **Kalkulator składek ZUS** z aktualnymi stawkami, uwzględniający ulgi (preferencyjny ZUS, Mały ZUS Plus)
+
+### 📊 Dashboard i Raporty
+- **Zaawansowany dashboard finansowy** z wykresami przychodów, kosztów, zysku i porównaniem rok do roku
+- **Progres roku podatkowego** z prognozami przychodu i podatku na koniec roku
+- **Raporty płatności** i faktur przeterminowanych
+- **Generowanie PDF** dla faktur oraz rocznych podsumowań podatkowych
+
+### 📱 Progressive Web App (PWA)
+- **Możliwość instalacji** na komputerach i urządzeniach mobilnych, działając jak natywna aplikacja
+- **Praca w trybie offline** dzięki zaawansowanemu Service Workerowi, który cache'uje zasoby i dane
+- **Szybki dostęp** dzięki skrótom do najczęstszych akcji (np. nowa faktura, dashboard)
+- **Powiadomienia** o statusie połączenia i dostępnych aktualizacjach
+
+### 🔑 Uwierzytelnianie i Bezpieczeństwo
+- **Logowanie i rejestracja przez Google** (OAuth2) dla wygody użytkowników
+- **Automatyczne zarządzanie uprawnieniami** i przypisywanie nowych użytkowników do odpowiedniej grupy
+- **Zaawansowane ustawienia bezpieczeństwa** dla środowiska produkcyjnego (nagłówki HTTP, ciasteczka, CSRF)
+- **Skrypty do wdrożenia i sprawdzania bezpieczeństwa** (deploy.sh, security_check.py)
 
 ### 🏢 Dane Firmy
 - Kompleksowy profil firmy
@@ -30,18 +49,14 @@ Kompleksowy system księgowy dla jednoosobowych działalności gospodarczych. Ap
 - Konfiguracja VAT i ZUS
 - Dane do faktur i rozliczeń
 
-### 📊 Raporty i Eksport
-- **PDF faktur** z profesjonalnym layoutem
-- **PDF rozliczeń rocznych** ze szczegółami
-- **Export JPK_FA** dla urzędu skarbowego
-- Zestawienia miesięczne i roczne
-
 ## 🛠️ Technologie
 
 - **Backend:** Django 5.2.3
 - **Frontend:** Bootstrap 5 + Jazzmin Admin
-- **Baza danych:** SQLite (możliwość PostgreSQL/MySQL)
+- **Baza danych:** SQLite (domyślnie), PostgreSQL (produkcyjnie)
 - **PDF:** WeasyPrint
+- **Uwierzytelnianie:** django-social-auth (dla Google OAuth)
+- **PWA:** Service Workers, Manifest API
 - **Styling:** CSS3, Font Awesome
 - **Python:** 3.12+
 
@@ -97,20 +112,22 @@ http://127.0.0.1:8000/admin/
 
 ### Pierwsze kroki
 1. **Zaloguj się do panelu admin**
-2. **Uzupełnij dane firmy** - przejdź do "Dane Firmy" i wprowadź:
-   - Pełne dane identyfikacyjne (nazwa, NIP, adres)
-   - Formę opodatkowania (ryczałt, skala, liniowy)
-   - Ustawienia VAT i ZUS
-   - Kod urzędu skarbowego
+2. **Uzupełnij dane firmy** - przejdź do "Dane Firmy" i wprowadź wszystkie wymagane informacje
+3. **Zaktualizuj stawki ZUS** - przejdź do "Stawki ZUS" i kliknij "Aktualizuj stawki"
 
-3. **Zaktualizuj stawki ZUS**
-   - Przejdź do "Stawki ZUS"
-   - Kliknij "Aktualizuj stawki" aby pobrać aktualne dane
+### Konfiguracja Google Login
+Aby włączyć logowanie przez Google, dodaj do pliku `.env` swoje klucze API:
+```env
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY=twoj-klucz-klienta
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET=twoj-sekret-klienta
+```
 
 ### Struktura bazy danych
 - `CompanyInfo` - dane firmy
 - `Contractor` - kontrahenci
 - `Invoice` + `InvoiceItem` - faktury z pozycjami
+- `PurchaseInvoice` - faktury zakupu/koszty
+- `Payment` - płatności od klientów
 - `MonthlySettlement` - rozliczenia miesięczne
 - `YearlySettlement` - rozliczenia roczne
 - `ZUSRates` - stawki składek ZUS
@@ -123,6 +140,11 @@ http://127.0.0.1:8000/admin/
 3. Wprowadź pozycje na fakturze
 4. Zapisz - numer zostanie wygenerowany automatycznie
 5. Wygeneruj PDF do wysłania klientowi
+
+### Zarządzanie kosztami
+1. Przejdź do "Faktury zakupu" → "Dodaj fakturę zakupu"
+2. Wprowadź dane faktury, wybierz kategorię i zaznacz, czy jest to koszt uzyskania przychodu
+3. Po zapisaniu, koszt zostanie uwzględniony w raportach i przyszłych rozliczeniach
 
 ### Import z JPK_FA
 1. "Faktury" → "Importuj z JPK"
@@ -144,18 +166,27 @@ http://127.0.0.1:8000/admin/
 3. Ustaw stawkę podatku
 4. System pokaże czy jest dopłata czy zwrot
 
+### Praca z PWA
+1. Otwórz aplikację w przeglądarce obsługującej PWA (np. Chrome, Edge, Safari)
+2. W pasku adresu powinna pojawić się ikona instalacji
+3. Kliknij ją, aby zainstalować aplikację na pulpicie lub ekranie głównym
+4. Uruchamiaj aplikację za pomocą nowej ikony, aby korzystać z trybu offline
+
 ## 📁 Struktura Projektu
 
 ```
 moja-fakturownia/
 ├── fakturownia/                 # Główne ustawienia Django
 │   ├── settings.py
-│   ├── urls.py
-│   └── wsgi.py
+│   └── urls.py
 ├── ksiegowosc/                  # Główna aplikacja
 │   ├── admin.py                 # Panel administracyjny
 │   ├── models.py                # Modele danych
 │   ├── views.py                 # Widoki
+│   ├── auth_views.py            # Widoki autoryzacji
+│   ├── pwa_views.py             # Widoki dla PWA
+│   ├── middleware.py            # Middleware
+│   ├── auth_pipeline.py         # Pipeline dla social auth
 │   ├── forms.py                 # Formularze
 │   ├── templates/               # Szablony HTML
 │   │   └── ksiegowosc/
@@ -166,8 +197,11 @@ moja-fakturownia/
 │   │   └── update_zus_rates.py
 │   └── migrations/              # Migracje bazy
 ├── static/                      # Pliki statyczne
+│   ├── pwa/                     # Zasoby PWA (ikony, manifest)
+│   └── sw.js                    # Service Worker
 ├── media/                       # Pliki użytkowników
 ├── requirements.txt             # Zależności Python
+├── deploy.sh                    # Skrypt wdrożeniowy
 └── manage.py                    # Skrypt zarządzający Django
 ```
 
@@ -178,15 +212,15 @@ moja-fakturownia/
 - Obliczanie składek na podstawie ustawień firmy
 - Obsługa preferencji i ulg
 
-### JPK_FA
-- Import z różnych wersji schema JPK
-- Export zgodny z wymogami MF
+### JPK
+- Import z różnych wersji schematu JPK_FA oraz JPK_EWP
+- Eksport JPK_FA zgodny z wymogami MF
 - Obsługa faktur korygujących
 
 ### Wieloużytkownikowość
 - Każdy użytkownik ma swoją niezależną księgowość
 - Izolacja danych między firmami
-- Zarządzanie uprawnieniami
+- Automatyczne zarządzanie uprawnieniami
 
 ## 🐛 Rozwiązywanie problemów
 
@@ -200,7 +234,15 @@ moja-fakturownia/
 
 ### Błędy składek ZUS
 - Zaktualizuj stawki ZUS w panelu administracyjnym
-- Sprawdź ustawienia firmy (preferencje, Małe ZUS Plus)
+- Sprawdź ustawienia firmy (preferencje, Mały ZUS Plus)
+
+### Problemy z PWA
+- Upewnij się, że serwer działa w trybie HTTPS (nawet z certyfikatem self-signed dla developmentu), aby Service Worker działał poprawnie
+- Wyczyść dane przeglądarki (cache i Service Workers) w narzędziach deweloperskich, jeśli aplikacja nie aktualizuje się
+
+### Błędy logowania przez Google
+- Sprawdź, czy `SOCIAL_AUTH_GOOGLE_OAUTH2_KEY` i `SECRET` w `.env` są poprawne
+- Upewnij się, że w konsoli Google Cloud skonfigurowałeś poprawny Redirect URI, który powinien wskazywać na `http://127.0.0.1:8000/auth/social/complete/google-oauth2/`
 
 ## 🤝 Wkład w projekt
 
@@ -231,31 +273,34 @@ W przypadku pytań lub problemów:
 ## 🔄 Historia wersji
 
 ### v1.0.0 (Aktualna)
-- Podstawowe zarządzanie fakturami
-- Import/Export JPK_FA
-- Rozliczenia miesięczne i roczne
-- Kalkulator składek ZUS
-- Generowanie PDF
+- **Pełne zarządzanie fakturami sprzedaży i kosztów**
+- **Import/Export JPK_FA** i **import JPK_EWP**
+- **Rozliczenia miesięczne i roczne**
+- **Kalkulator składek ZUS**
+- **Generowanie PDF**
+- **🆕 Aplikacja PWA z trybem offline**
+- **🆕 Logowanie przez Google**
+- **🆕 Zaawansowany dashboard finansowy**
+- **🆕 Moduł śledzenia płatności**
 
 ### Planowane funkcje
 - [ ] Integracja z systemami bankowymi
 - [ ] Automatyczne wysyłanie faktur email
-- [ ] Dashboard z wykresami i statystykami
 - [ ] Eksport do programów księgowych
 - [ ] Aplikacja mobilna
 
-##  📝 Licencja
+## 📝 Licencja
 
 Ten projekt jest udostępniony na licencji Creative Commons (CC BY-NC-SA 4.0).
 
-** Oznacza to, że możesz swobodnie: **
-  - Kopiować i rozpowszechniać oprogramowanie w dowolnym medium i formacie
-  - Adaptować, remiksować i tworzyć na podstawie tego oprogramowania.
+**Oznacza to, że możesz swobodnie:**
+- Kopiować i rozpowszechniać oprogramowanie w dowolnym medium i formacie
+- Adaptować, remiksować i tworzyć na podstawie tego oprogramowania
 
-** Pod następującymi warunkami:**
- - Uznanie autorstwa (BY) — Musisz odpowiednio oznaczyć autorstwo, podać link do licencji i wskazać, czy dokonano zmian.
- - Użycie niekomercyjne (NC) — Nie możesz używać tego oprogramowania do celów komercyjnych.
- - Na tych samych warunkach (SA) — Jeśli remiksujesz, zmieniasz lub tworzysz na podstawie materiału, musisz rozpowszechniać swoje dzieła na tej samej licencji, co oryginał.
+**Pod następującymi warunkami:**
+- **Uznanie autorstwa (BY)** — Musisz odpowiednio oznaczyć autorstwo, podać link do licencji i wskazać, czy dokonano zmian
+- **Użycie niekomercyjne (NC)** — Nie możesz używać tego oprogramowania do celów komercyjnych
+- **Na tych samych warunkach (SA)** — Jeśli remiksujesz, zmieniasz lub tworzysz na podstawie materiału, musisz rozpowszechniać swoje dzieła na tej samej licencji, co oryginał
 
 Pełną treść licencji znajdziesz w pliku LICENSE w tym repozytorium oraz pod adresem:
 http://creativecommons.org/licenses/by-nc-sa/4.0/
