@@ -11,7 +11,7 @@ urlpatterns = [
     # Rejestracja
     path('register/', auth_views.register_view, name='register'),
     path('register-class/', auth_views.RegisterView.as_view(), name='register_class'),
-    
+
     # Logowanie i wylogowanie
     path('login/', django_auth_views.LoginView.as_view(
         template_name='auth/login.html',
