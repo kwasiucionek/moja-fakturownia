@@ -145,7 +145,7 @@ urlpatterns = [
     path('', RedirectView.as_view(url='/auth/login/', permanent=False)),
 
     # Social auth
-    path('social-auth/', include('social_django.urls', namespace='social')),
+#    path('social-auth/', include('social_django.urls', namespace='social')),
 ]
 
 # =============================================================================
