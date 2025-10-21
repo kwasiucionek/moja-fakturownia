@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from ksiegowosc.models import ZUSRates, fetch_zus_rates_from_web
+from ksiegowosc.models import ZUSRates
+from ksiegowosc.utils import fetch_zus_rates_from_web
 from decimal import Decimal
 
 class Command(BaseCommand):
