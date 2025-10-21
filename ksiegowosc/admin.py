@@ -1,9 +1,12 @@
+# kwasiucionek/moja-fakturownia/moja-fakturownia-4c80630ade4a7f1e9a9ce2a4356f6c77e3cdf6e6/ksiegowosc/admin.py
+
 from django.contrib import admin
 from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.template.loader import render_to_string
-from weasyprint import HTML
+
+# Usunięto "from weasyprint import HTML" z tego miejsca
 from .models import (
     CompanyInfo,
     Contractor,
@@ -1063,6 +1066,8 @@ class InvoiceAdmin(admin.ModelAdmin):
         return items_created
 
     def generate_pdf_view(self, request, object_id):
+        from weasyprint import HTML  # Import wewnątrz metody
+
         queryset = self.get_queryset(request)
         try:
             invoice = queryset.get(pk=object_id)
@@ -1899,6 +1904,8 @@ class YearlySettlementAdmin(admin.ModelAdmin):
         return render(request, "ksiegowosc/yearly_settlement_form.html", context)
 
     def generate_yearly_pdf_view(self, request, object_id):
+        from weasyprint import HTML  # Import wewnątrz metody
+
         """Generuje PDF z rozliczeniem rocznym"""
         queryset = self.get_queryset(request)
         try:
