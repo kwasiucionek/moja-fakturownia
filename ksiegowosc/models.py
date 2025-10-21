@@ -684,9 +684,9 @@ class Invoice(models.Model):
     invoice_number = models.CharField(max_length=50, verbose_name="Numer faktury")
     issue_date = models.DateField(default=timezone.now, verbose_name="Data wystawienia")
     sale_date = models.DateField(default=timezone.now, verbose_name="Data sprzedaży")
-    payment_date = models.DateField(verbose_name="Termin płatności")
+    # USUNIĘTA ZDUPLOWANA LINIA Z TEGO MIEJSCA
     contractor = models.ForeignKey(
-        Contractor, on_delete=models.PROTECT, verbose_name="Kontrahent"
+        "Contractor", on_delete=models.PROTECT, verbose_name="Kontrahent"
     )
     total_amount = models.DecimalField(
         max_digits=10, decimal_places=2, default=0.00, verbose_name="Kwota całkowita"
@@ -703,7 +703,7 @@ class Invoice(models.Model):
         default="unpaid",
         verbose_name="Status płatności",
     )
-    payment_date = models.DateField(
+    payment_date = models.DateField(  # <-- ZOSTAWIAMY TĘ WERSJĘ
         verbose_name="Termin płatności", blank=True, null=True
     )
     notes = models.TextField(blank=True, null=True, verbose_name="Uwagi")
@@ -720,6 +720,38 @@ class Invoice(models.Model):
         verbose_name="Faktura korygowana",
     )
 
+    # === POLA DLA INTEGRACJI Z KSeF ===
+    ksef_reference_number = models.CharField(
+        max_length=40,
+        blank=True,
+        null=True,
+        unique=True,
+        verbose_name="Numer referencyjny KSeF",
+    )
+    ksef_status = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        verbose_name="Status w KSeF",
+        help_text="Status przetwarzania faktury w KSeF (np. Wysłano, Przetworzono, Błąd)",
+    )
+    ksef_sent_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="Data wysłania do KSeF"
+    )
+    ksef_session_id = models.CharField(
+        max_length=40,
+        blank=True,
+        null=True,
+        verbose_name="ID sesji KSeF",
+        help_text="Numer referencyjny sesji po wysłaniu faktury",
+    )
+    ksef_processing_description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Opis przetwarzania KSeF",
+        help_text="Zawiera komunikaty o błędach lub sukcesie z KSeF",
+    )
+
     class Meta:
         verbose_name = "Faktura"
         verbose_name_plural = "Faktury"
@@ -730,39 +762,31 @@ class Invoice(models.Model):
         return f"Faktura {self.invoice_number} dla {self.contractor.name}"
 
     def save(self, *args, **kwargs):
-        # Automatycznie ustaw payment_date jeśli nie jest ustawione
         if not self.payment_date:
-            self.payment_date = self.issue_date + timedelta(
-                days=14
-            )  # 14 dni termin płatności
+            self.payment_date = self.issue_date + timedelta(days=14)
         super().save(*args, **kwargs)
 
     def update_total_amount(self):
-        """Metoda do aktualizacji sumy faktury na podstawie jej pozycji."""
         total = self.items.aggregate(total=models.Sum("total_price"))["total"] or 0.00
         self.total_amount = total
         self.save(update_fields=["total_amount"])
 
     @property
     def total_paid(self):
-        """Suma zapłaconych kwot"""
         return self.payments.filter(status="completed").aggregate(total=Sum("amount"))[
             "total"
         ] or Decimal("0.00")
 
     @property
     def balance_due(self):
-        """Pozostała kwota do zapłaty"""
         return self.total_amount - self.total_paid
 
     @property
     def is_fully_paid(self):
-        """Czy faktura jest w pełni opłacona"""
         return self.balance_due <= Decimal("0.00")
 
     @property
     def is_overdue(self):
-        """Czy faktura jest przeterminowana"""
         from django.utils import timezone
 
         return (
@@ -773,7 +797,6 @@ class Invoice(models.Model):
 
     @property
     def payment_status(self):
-        """Status płatności faktury"""
         if self.is_fully_paid:
             return "paid"
         elif self.total_paid > 0:
@@ -785,7 +808,6 @@ class Invoice(models.Model):
 
     @property
     def payment_status_display(self):
-        """Czytelny status płatności"""
         status_map = {
             "paid": "Opłacona",
             "partial": "Częściowo opłacona",
@@ -793,59 +815,6 @@ class Invoice(models.Model):
             "unpaid": "Nieopłacona",
         }
         return status_map.get(self.payment_status, "Nieokreślony")
-
-
-class InvoiceItem(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
-    invoice = models.ForeignKey(
-        Invoice, related_name="items", on_delete=models.CASCADE, verbose_name="Faktura"
-    )
-    name = models.CharField(max_length=255, verbose_name="Nazwa usługi")
-    quantity = models.DecimalField(
-        max_digits=10, decimal_places=2, verbose_name="Ilość"
-    )
-    unit = models.CharField(max_length=10, default="godz.", verbose_name="J.M.")
-    unit_price = models.DecimalField(
-        max_digits=10, decimal_places=2, verbose_name="Cena jedn."
-    )
-    total_price = models.DecimalField(
-        max_digits=10, decimal_places=2, verbose_name="Wartość"
-    )
-    lump_sum_tax_rate = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=14.00,
-        verbose_name="Stawka ryczałtu (%)",
-    )
-
-    corrected_item = models.ForeignKey(
-        "self",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="correction_entries",
-        verbose_name="Korygowana pozycja",
-    )
-
-    class Meta:
-        verbose_name = "Pozycja na fakturze"
-        verbose_name_plural = "Pozycje na fakturze"
-
-    def save(self, *args, **kwargs):
-        # Automatyczne obliczanie wartości dla pozycji
-        self.total_price = self.quantity * self.unit_price
-        super().save(*args, **kwargs)
-        # Po zapisaniu pozycji, aktualizujemy sumę całej faktury
-        self.invoice.update_total_amount()
-
-    def delete(self, *args, **kwargs):
-        invoice = self.invoice
-        super().delete(*args, **kwargs)
-        # Po usunięciu pozycji, również aktualizujemy sumę
-        invoice.update_total_amount()
-
-    def __str__(self):
-        return self.name
 
 
 class MonthlySettlement(models.Model):
