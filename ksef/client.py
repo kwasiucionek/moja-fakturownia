@@ -36,8 +36,6 @@ class KsefClient:
 
         # === KOD ZAKTUALIZOWANY DLA API v2.0 ===
         challenge_url = f"{self.base_url}/online/v2/Session/AuthorisationChallenge"
-        warsaw_tz = pytz.timezone("Europe/Warsaw")
-        timestamp = datetime.now(warsaw_tz).isoformat(timespec="milliseconds")
 
         headers = {"Content-Type": "application/json"}
         context = {
@@ -54,6 +52,7 @@ class KsefClient:
             response.raise_for_status()
             challenge_data = response.json()
             challenge = challenge_data["challenge"]
+            timestamp = challenge_data["timestamp"]  # Pobieramy timestamp z odpowiedzi
             logger.info("Otrzymano challenge z KSeF API v2.0.")
 
             auth_url = f"{self.base_url}/online/v2/Session/InitToken"
