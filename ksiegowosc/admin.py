@@ -374,15 +374,15 @@ class InvoiceAdmin(admin.ModelAdmin):
         "payment_status_colored",
         "balance_due_colored",
         "is_correction",
-        "ksef_status_colored",  # Dodane pole
-        "ksef_reference_number",  # Dodane pole
+        "ksef_status_colored",
+        "ksef_reference_number",
         "user",
     )
     list_filter = (
         "issue_date",
         "contractor",
         "is_correction",
-        "ksef_status",  # Dodany filtr
+        "ksef_status",
         "user",
         PaymentStatusFilter,
     )
@@ -394,13 +394,12 @@ class InvoiceAdmin(admin.ModelAdmin):
         "ksef_session_id",
         "ksef_processing_description",
     )
-    actions = ["export_selected_to_jpk", "send_to_ksef"]  # Dodana akcja
+    actions = ["export_selected_to_jpk", "send_to_ksef"]
 
     class Media:
         css = {"all": ("admin/css/custom_admin.css",)}
 
     def payment_status_colored(self, obj):
-        """Kolorowy status płatności"""
         status = obj.payment_status
         colors = {
             "paid": "green",
@@ -417,7 +416,6 @@ class InvoiceAdmin(admin.ModelAdmin):
     payment_status_colored.short_description = "Status płatności"
 
     def balance_due_colored(self, obj):
-        """Kolorowa pozostała kwota do zapłaty"""
         balance = obj.balance_due
         if balance <= 0:
             return format_html(
@@ -432,12 +430,9 @@ class InvoiceAdmin(admin.ModelAdmin):
 
     balance_due_colored.short_description = "Do zapłaty"
 
-    # Nowe funkcje dla KSeF
     def ksef_status_colored(self, obj):
-        """Kolorowy status KSeF."""
         if not obj.ksef_status:
             return "Brak"
-
         status = obj.ksef_status.lower()
         color = "gray"
         if "przetworzono" in status:
@@ -446,7 +441,6 @@ class InvoiceAdmin(admin.ModelAdmin):
             color = "red"
         elif "wysłano" in status or "processing" in status:
             color = "orange"
-
         return format_html(
             '<span style="color: {}; font-weight: bold;">{}</span>',
             color,
@@ -456,12 +450,9 @@ class InvoiceAdmin(admin.ModelAdmin):
     ksef_status_colored.short_description = "Status KSeF"
     ksef_status_colored.admin_order_field = "ksef_status"
 
-    @admin.action(description="Wyślij zaznaczone faktury do KSeF")
-    def send_to_ksef(self, request, queryset):
-        """Akcja administratora do wysyłania faktur do KSeF."""
+    def _send_invoices_to_ksef(self, request, queryset):
         sent_count = 0
         error_count = 0
-
         for invoice in queryset:
             if invoice.ksef_reference_number:
                 self.message_user(
@@ -470,18 +461,10 @@ class InvoiceAdmin(admin.ModelAdmin):
                     messages.WARNING,
                 )
                 continue
-
             try:
-                # Inicjalizacja klienta KSeF
                 client = KsefClient(request.user)
-
-                # Generowanie XML
                 invoice_xml = generate_invoice_xml(invoice)
-
-                # Wysyłka
                 response = client.send_invoice(invoice_xml)
-
-                # Aktualizacja statusu faktury
                 invoice.ksef_status = "Wysłano"
                 invoice.ksef_sent_at = timezone.now()
                 invoice.ksef_session_id = response.get("sessionID")
@@ -489,9 +472,7 @@ class InvoiceAdmin(admin.ModelAdmin):
                     "processingDescription"
                 )
                 invoice.save()
-
                 sent_count += 1
-
             except Exception as e:
                 error_count += 1
                 invoice.ksef_status = f"Błąd: {e}"
@@ -501,6 +482,40 @@ class InvoiceAdmin(admin.ModelAdmin):
                     f"Błąd przy wysyłce faktury {invoice.invoice_number}: {e}",
                     messages.ERROR,
                 )
+        return sent_count, error_count
+
+    @admin.action(description="Wyślij zaznaczone faktury do KSeF (z listy)")
+    def send_to_ksef(self, request, queryset):
+        sent_count, error_count = self._send_invoices_to_ksef(request, queryset)
+        if sent_count > 0:
+            self.message_user(
+                request,
+                f"Pomyślnie wysłano {sent_count} faktur do KSeF.",
+                messages.SUCCESS,
+            )
+        if error_count > 0:
+            self.message_user(
+                request, f"Nie udało się wysłać {error_count} faktur.", messages.ERROR
+            )
+
+    def send_to_ksef_view(self, request):
+        selected_ids_str = request.GET.get("ids")
+        if not selected_ids_str:
+            self.message_user(
+                request, "Nie zaznaczono żadnych faktur.", messages.WARNING
+            )
+            return redirect("admin:ksiegowosc_invoice_changelist")
+
+        selected_ids = selected_ids_str.split(",")
+        queryset = self.get_queryset(request).filter(pk__in=selected_ids)
+
+        if not queryset.exists():
+            self.message_user(
+                request, "Wybrane faktury nie zostały znalezione.", messages.ERROR
+            )
+            return redirect("admin:ksiegowosc_invoice_changelist")
+
+        sent_count, error_count = self._send_invoices_to_ksef(request, queryset)
 
         if sent_count > 0:
             self.message_user(
@@ -512,6 +527,8 @@ class InvoiceAdmin(admin.ModelAdmin):
             self.message_user(
                 request, f"Nie udało się wysłać {error_count} faktur.", messages.ERROR
             )
+
+        return redirect("admin:ksiegowosc_invoice_changelist")
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "contractor" and not request.user.is_superuser:
@@ -543,27 +560,33 @@ class InvoiceAdmin(admin.ModelAdmin):
             path(
                 "<int:object_id>/change/generate-pdf/",
                 self.admin_site.admin_view(self.generate_pdf_view),
-                name="ksiegowosc_invoice_pdf",
+                name="pdf",  # Django admin auto-prefixes this
             ),
             path(
                 "import-jpk/",
                 self.admin_site.admin_view(self.import_jpk_view),
-                name="ksiegowosc_invoice_import_jpk",
+                name="import_jpk",
             ),
             path(
                 "export-jpk/",
                 self.admin_site.admin_view(self.export_jpk_view),
-                name="ksiegowosc_invoice_export_jpk",
+                name="export_jpk",
+            ),
+            # POPRAWIONA LINIA - nazwa jest teraz krótka
+            path(
+                "send-ksef/",
+                self.admin_site.admin_view(self.send_to_ksef_view),
+                name="send_ksef",
             ),
             path(
                 "payments-report/",
                 self.admin_site.admin_view(self.payments_report_view),
-                name="ksiegowosc_invoice_payments_report",
+                name="payments_report",
             ),
             path(
                 "overdue-report/",
                 self.admin_site.admin_view(self.overdue_report_view),
-                name="ksiegowosc_invoice_overdue_report",
+                name="overdue_report",
             ),
         ]
         return my_urls + urls
