@@ -3,9 +3,8 @@
 import requests
 from django.conf import settings
 
-# Importujemy teraz z lokalnej kopii biblioteki
+# Importujemy tylko KSEFService
 from ksef_utils.server import KSEFService
-from ksef_utils.config import KSEFServer
 from ksiegowosc.models import CompanyInfo
 
 
@@ -19,15 +18,16 @@ class KsefClient:
         if not self.company_info.ksef_token:
             raise Exception("Brak tokena KSeF w ustawieniach firmy.")
 
+        # Przekazujemy tylko prosty tekst 'test' lub 'prod'
         env_str = self.company_info.ksef_environment
-        server_env = KSEFServer.TEST if env_str == "test" else KSEFServer.PROD
+        self.service = KSEFService(env_str)
 
-        self.service = KSEFService(server_env)
         self.session = None
 
     def _initialize_session(self):
         if not self.session:
             try:
+                # Metoda auth_by_token nie potrzebuje już żadnych dodatkowych argumentów
                 self.session = self.service.auth_by_token(
                     nip=self.company_info.tax_id,
                     token=self.company_info.ksef_token,
