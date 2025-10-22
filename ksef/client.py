@@ -24,6 +24,7 @@ class KsefClient:
         # Inicjujemy odpowiednią klasę konfiguracyjną
         config_obj = TestConfig() if env_str == "test" else ProdConfig()
 
+        # Przekazujemy instancję obiektu konfiguracyjnego do KSEFService
         self.service = KSEFService(config_obj)
 
         self.session = None
