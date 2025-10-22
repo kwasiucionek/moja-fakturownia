@@ -2,7 +2,7 @@
 
 import requests
 from django.conf import settings
-from ksef_utils.server import KSEFServer, KSEFService
+from ksef_utils.server import KSEFService  # Usunięto KSEFServer
 from ksiegowosc.models import CompanyInfo
 
 
@@ -16,16 +16,17 @@ class KsefClient:
         if not self.company_info.ksef_token:
             raise Exception("Brak tokena KSeF w ustawieniach firmy.")
 
+        # === POPRAWIONY BLOK KODU ===
+        # Pobieramy środowisko ('test' lub 'prod') bezpośrednio z modelu
         env = self.company_info.ksef_environment
-        server = KSEFServer.TEST if env == "test" else KSEFServer.PROD
-        self.service = KSEFService(server)
+        # Przekazujemy je bezpośrednio do KSEFService
+        self.service = KSEFService(env)
+
         self.session = None
 
     def _initialize_session(self):
         if not self.session:
             try:
-                # === POPRAWIONA LINIA ===
-                # Zmieniono 'init_token' na 'auth_by_token'
                 self.session = self.service.auth_by_token(
                     self.company_info.tax_id, self.company_info.ksef_token
                 )
