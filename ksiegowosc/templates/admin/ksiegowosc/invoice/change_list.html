@@ -13,11 +13,7 @@
     Wyślij zaznaczone do KSeF
 </a>
 
-<a
-    href="{% url 'admin:ksiegowosc_invoice_export_jpk' %}"
-    class="btn btn-success"
-    id="export-jpk-btn"
->
+<a href="#" class="btn btn-success" id="export-jpk-btn">
     <i class="fas fa-file-export"></i>
     Eksportuj zaznaczone do JPK
 </a>
@@ -63,7 +59,7 @@
             });
         }
 
-        // NOWA FUNKCJONALNOŚĆ DLA PRZYCISKU WYSYŁKI DO KSEF
+        // Funkcjonalność dla przycisku wysyłki do KSeF
         const sendKsefBtn = document.getElementById("send-ksef-btn");
         if (sendKsefBtn) {
             sendKsefBtn.addEventListener("click", function (event) {
@@ -79,7 +75,6 @@
                     );
                     return;
                 }
-                // Używamy nowego URL, który dodaliśmy w admin.py
                 const url =
                     "{% url 'admin:ksiegowosc_invoice_send_ksef' %}" +
                     "?ids=" +
