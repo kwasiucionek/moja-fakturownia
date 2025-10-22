@@ -190,7 +190,7 @@ class KsefClient:
             context = {
                 "contextIdentifier": {
                     "type": "NIP",
-                    "identifier": self.company_info.tax_id,
+                    "identifier": self.nip,
                 }
             }
 
@@ -213,7 +213,7 @@ class KsefClient:
             auth_url = f"{self.base_url}/auth/ksef-token"
             payload = {
                 "challenge": challenge,
-                "contextIdentifier": {"type": "NIP", "value": self.company_info.tax_id},
+                "contextIdentifier": {"type": "NIP", "value": self.nip},
                 "encryptedToken": encrypted_token,
             }
 
@@ -373,7 +373,7 @@ class KsefClient:
             raise Exception(f"Błąd wysyłki faktury do KSeF: {error_details}")
 
         # Przechowuj NIP bez myślników
-        self.nip = self._normalize_nip(self.company_info.tax_id)
+        self.nip = self._normalize_nip(self.nip)
 
     def _normalize_nip(self, nip: str) -> str:
         """
