@@ -556,37 +556,41 @@ class InvoiceAdmin(admin.ModelAdmin):
 
     def get_urls(self):
         urls = super().get_urls()
+
+        # Helper function to create a full name
+        def info(model_name):
+            return self.model._meta.app_label, self.model._meta.model_name
+
         my_urls = [
             path(
                 "<int:object_id>/change/generate-pdf/",
                 self.admin_site.admin_view(self.generate_pdf_view),
-                name="pdf",  # Django admin auto-prefixes this
+                name="%s_%s_pdf" % info(self.model),
             ),
             path(
                 "import-jpk/",
                 self.admin_site.admin_view(self.import_jpk_view),
-                name="import_jpk",
+                name="%s_%s_import_jpk" % info(self.model),
             ),
             path(
                 "export-jpk/",
                 self.admin_site.admin_view(self.export_jpk_view),
-                name="export_jpk",
+                name="%s_%s_export_jpk" % info(self.model),
             ),
-            # POPRAWIONA LINIA - nazwa jest teraz krótka
             path(
                 "send-ksef/",
                 self.admin_site.admin_view(self.send_to_ksef_view),
-                name="send_ksef",
+                name="%s_%s_send_ksef" % info(self.model),
             ),
             path(
                 "payments-report/",
                 self.admin_site.admin_view(self.payments_report_view),
-                name="payments_report",
+                name="%s_%s_payments_report" % info(self.model),
             ),
             path(
                 "overdue-report/",
                 self.admin_site.admin_view(self.overdue_report_view),
-                name="overdue_report",
+                name="%s_%s_overdue_report" % info(self.model),
             ),
         ]
         return my_urls + urls
