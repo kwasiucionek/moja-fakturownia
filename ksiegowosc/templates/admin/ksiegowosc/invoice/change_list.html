@@ -1,47 +1,92 @@
-{% extends "admin/change_list.html" %}
+{% extends "admin/change_list.html" %} {% block object-tools-items %}
 
-{% block object-tools-items %}
+<a
+    href="{% url 'admin:ksiegowosc_invoice_import_jpk' %}"
+    class="btn btn-primary"
+>
+    <i class="fas fa-file-import"></i>
+    Importuj z JPK
+</a>
 
-        <a href="{% url 'admin:ksiegowosc_invoice_import_jpk' %}" class="btn btn-primary">
-            <i class="fas fa-file-import"></i>
-            Importuj z JPK
-        </a>
+<a href="#" class="btn btn-info" id="send-ksef-btn">
+    <i class="fas fa-paper-plane"></i>
+    Wyślij zaznaczone do KSeF
+</a>
 
+<a
+    href="{% url 'admin:ksiegowosc_invoice_export_jpk' %}"
+    class="btn btn-success"
+    id="export-jpk-btn"
+>
+    <i class="fas fa-file-export"></i>
+    Eksportuj zaznaczone do JPK
+</a>
 
-        <a href="{% url 'admin:ksiegowosc_invoice_export_jpk' %}" class="btn btn-success" id="export-jpk-btn">
-            <i class="fas fa-file-export"></i>
-            Eksportuj zaznaczone do JPK
-        </a>
+<a
+    href="{% url 'admin:ksiegowosc_invoice_payments_report' %}"
+    class="btn btn-info"
+>
+    <i class="fas fa-chart-bar"></i> Raport płatności
+</a>
 
+<a
+    href="{% url 'admin:ksiegowosc_invoice_overdue_report' %}"
+    class="btn btn-warning"
+>
+    <i class="fas fa-clock"></i> Przeterminowane
+</a>
 
-        <a href="{% url 'admin:ksiegowosc_invoice_payments_report' %}" class="btn btn-info">
-            <i class="fas fa-chart-bar"></i> Raport płatności
-        </a>
-
-
-        <a href="{% url 'admin:ksiegowosc_invoice_overdue_report' %}" class="btn btn-warning">
-            <i class="fas fa-clock"></i> Przeterminowane
-        </a>
-
-    {{ block.super }}
-{% endblock %}
-
-{% block extrahead %}{{ block.super }}
+{{ block.super }} {% endblock %} {% block extrahead %}{{ block.super }}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const exportBtn = document.getElementById('export-jpk-btn');
-    if (exportBtn) {
-        exportBtn.addEventListener('click', function(event) {
-            event.preventDefault();
-            const selected = Array.from(document.querySelectorAll('#result_list input.action-select:checked')).map(cb => cb.value);
-            if (selected.length === 0) {
-                alert('Proszę zaznaczyć przynajmniej jedną fakturę do eksportu.');
-                return;
-            }
-            const url = this.href + '?ids=' + selected.join(',');
-            window.location.href = url;
-        });
-    }
-});
+    document.addEventListener("DOMContentLoaded", function () {
+        // Funkcjonalność dla przycisku eksportu JPK
+        const exportBtn = document.getElementById("export-jpk-btn");
+        if (exportBtn) {
+            exportBtn.addEventListener("click", function (event) {
+                event.preventDefault();
+                const selected = Array.from(
+                    document.querySelectorAll(
+                        "#result_list input.action-select:checked",
+                    ),
+                ).map((cb) => cb.value);
+                if (selected.length === 0) {
+                    alert(
+                        "Proszę zaznaczyć przynajmniej jedną fakturę do eksportu.",
+                    );
+                    return;
+                }
+                const url =
+                    "{% url 'admin:ksiegowosc_invoice_export_jpk' %}" +
+                    "?ids=" +
+                    selected.join(",");
+                window.location.href = url;
+            });
+        }
+
+        // NOWA FUNKCJONALNOŚĆ DLA PRZYCISKU WYSYŁKI DO KSEF
+        const sendKsefBtn = document.getElementById("send-ksef-btn");
+        if (sendKsefBtn) {
+            sendKsefBtn.addEventListener("click", function (event) {
+                event.preventDefault();
+                const selected = Array.from(
+                    document.querySelectorAll(
+                        "#result_list input.action-select:checked",
+                    ),
+                ).map((cb) => cb.value);
+                if (selected.length === 0) {
+                    alert(
+                        "Proszę zaznaczyć przynajmniej jedną fakturę do wysłania do KSeF.",
+                    );
+                    return;
+                }
+                // Używamy nowego URL, który dodaliśmy w admin.py
+                const url =
+                    "{% url 'admin:ksiegowosc_invoice_send_ksef' %}" +
+                    "?ids=" +
+                    selected.join(",");
+                window.location.href = url;
+            });
+        }
+    });
 </script>
 {% endblock %}
