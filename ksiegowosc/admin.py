@@ -374,15 +374,15 @@ class InvoiceAdmin(admin.ModelAdmin):
         "payment_status_colored",
         "balance_due_colored",
         "is_correction",
-        "ksef_status_colored",
-        "ksef_reference_number",
+        "ksef_status_colored",  # Dodane pole
+        "ksef_reference_number",  # Dodane pole
         "user",
     )
     list_filter = (
         "issue_date",
         "contractor",
         "is_correction",
-        "ksef_status",
+        "ksef_status",  # Dodany filtr
         "user",
         PaymentStatusFilter,
     )
@@ -394,12 +394,13 @@ class InvoiceAdmin(admin.ModelAdmin):
         "ksef_session_id",
         "ksef_processing_description",
     )
-    actions = ["export_selected_to_jpk", "send_to_ksef"]
+    actions = ["export_selected_to_jpk", "send_to_ksef"]  # Dodana akcja
 
     class Media:
         css = {"all": ("admin/css/custom_admin.css",)}
 
     def payment_status_colored(self, obj):
+        """Kolorowy status płatności"""
         status = obj.payment_status
         colors = {
             "paid": "green",
@@ -416,6 +417,7 @@ class InvoiceAdmin(admin.ModelAdmin):
     payment_status_colored.short_description = "Status płatności"
 
     def balance_due_colored(self, obj):
+        """Kolorowa pozostała kwota do zapłaty"""
         balance = obj.balance_due
         if balance <= 0:
             return format_html(
@@ -430,9 +432,12 @@ class InvoiceAdmin(admin.ModelAdmin):
 
     balance_due_colored.short_description = "Do zapłaty"
 
+    # Nowe funkcje dla KSeF
     def ksef_status_colored(self, obj):
+        """Kolorowy status KSeF."""
         if not obj.ksef_status:
             return "Brak"
+
         status = obj.ksef_status.lower()
         color = "gray"
         if "przetworzono" in status:
@@ -441,6 +446,7 @@ class InvoiceAdmin(admin.ModelAdmin):
             color = "red"
         elif "wysłano" in status or "processing" in status:
             color = "orange"
+
         return format_html(
             '<span style="color: {}; font-weight: bold;">{}</span>',
             color,
@@ -450,9 +456,12 @@ class InvoiceAdmin(admin.ModelAdmin):
     ksef_status_colored.short_description = "Status KSeF"
     ksef_status_colored.admin_order_field = "ksef_status"
 
-    def _send_invoices_to_ksef(self, request, queryset):
+    @admin.action(description="Wyślij zaznaczone faktury do KSeF")
+    def send_to_ksef(self, request, queryset):
+        """Akcja administratora do wysyłania faktur do KSeF."""
         sent_count = 0
         error_count = 0
+
         for invoice in queryset:
             if invoice.ksef_reference_number:
                 self.message_user(
@@ -461,10 +470,18 @@ class InvoiceAdmin(admin.ModelAdmin):
                     messages.WARNING,
                 )
                 continue
+
             try:
+                # Inicjalizacja klienta KSeF
                 client = KsefClient(request.user)
+
+                # Generowanie XML
                 invoice_xml = generate_invoice_xml(invoice)
+
+                # Wysyłka
                 response = client.send_invoice(invoice_xml)
+
+                # Aktualizacja statusu faktury
                 invoice.ksef_status = "Wysłano"
                 invoice.ksef_sent_at = timezone.now()
                 invoice.ksef_session_id = response.get("sessionID")
@@ -472,7 +489,9 @@ class InvoiceAdmin(admin.ModelAdmin):
                     "processingDescription"
                 )
                 invoice.save()
+
                 sent_count += 1
+
             except Exception as e:
                 error_count += 1
                 invoice.ksef_status = f"Błąd: {e}"
@@ -482,40 +501,6 @@ class InvoiceAdmin(admin.ModelAdmin):
                     f"Błąd przy wysyłce faktury {invoice.invoice_number}: {e}",
                     messages.ERROR,
                 )
-        return sent_count, error_count
-
-    @admin.action(description="Wyślij zaznaczone faktury do KSeF (z listy)")
-    def send_to_ksef(self, request, queryset):
-        sent_count, error_count = self._send_invoices_to_ksef(request, queryset)
-        if sent_count > 0:
-            self.message_user(
-                request,
-                f"Pomyślnie wysłano {sent_count} faktur do KSeF.",
-                messages.SUCCESS,
-            )
-        if error_count > 0:
-            self.message_user(
-                request, f"Nie udało się wysłać {error_count} faktur.", messages.ERROR
-            )
-
-    def send_to_ksef_view(self, request):
-        selected_ids_str = request.GET.get("ids")
-        if not selected_ids_str:
-            self.message_user(
-                request, "Nie zaznaczono żadnych faktur.", messages.WARNING
-            )
-            return redirect("admin:ksiegowosc_invoice_changelist")
-
-        selected_ids = selected_ids_str.split(",")
-        queryset = self.get_queryset(request).filter(pk__in=selected_ids)
-
-        if not queryset.exists():
-            self.message_user(
-                request, "Wybrane faktury nie zostały znalezione.", messages.ERROR
-            )
-            return redirect("admin:ksiegowosc_invoice_changelist")
-
-        sent_count, error_count = self._send_invoices_to_ksef(request, queryset)
 
         if sent_count > 0:
             self.message_user(
@@ -527,8 +512,6 @@ class InvoiceAdmin(admin.ModelAdmin):
             self.message_user(
                 request, f"Nie udało się wysłać {error_count} faktur.", messages.ERROR
             )
-
-        return redirect("admin:ksiegowosc_invoice_changelist")
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "contractor" and not request.user.is_superuser:
@@ -571,11 +554,6 @@ class InvoiceAdmin(admin.ModelAdmin):
                 "export-jpk/",
                 self.admin_site.admin_view(self.export_jpk_view),
                 name="ksiegowosc_invoice_export_jpk",
-            ),
-            path(
-                "send-ksef/",
-                self.admin_site.admin_view(self.send_to_ksef_view),
-                name="ksiegowosc_invoice_send_ksef",
             ),
             path(
                 "payments-report/",
@@ -1213,3 +1191,1030 @@ class InvoiceAdmin(admin.ModelAdmin):
             f'attachment; filename="faktura-{invoice.invoice_number.replace("/", "_")}.pdf"'
         )
         return response
+
+
+# ==== MONTHLY SETTLEMENT ADMIN ====
+
+
+@admin.register(MonthlySettlement)
+class MonthlySettlementAdmin(admin.ModelAdmin):
+    change_list_template = "admin/ksiegowosc/monthlysettlement/change_list.html"
+    list_display = ("year", "month", "total_revenue", "income_tax_payable", "user")
+    list_filter = ("year", "month", "user")
+    search_fields = ("year", "month")
+    readonly_fields = ("created_at",)
+    exclude = ("user",)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path(
+                "dashboard/",
+                self.admin_site.admin_view(self.dashboard_view),
+                name="ksiegowosc_dashboard",
+            ),
+            path(
+                "oblicz/",
+                self.admin_site.admin_view(self.calculate_view),
+                name="ksiegowosc_monthlysettlement_calculate",
+            ),
+            path(
+                "kalkulator-zus/",
+                self.admin_site.admin_view(self.zus_calculator_view),
+                name="ksiegowosc_monthlysettlement_zus_calculator",
+            ),
+            path(
+                "import-jpk-ewp/",
+                self.admin_site.admin_view(self.import_jpk_ewp_view),
+                name="ksiegowosc_monthlysettlement_import_jpk_ewp",
+            ),
+        ]
+        return my_urls + urls
+
+    def import_jpk_ewp_view(self, request):
+        context = dict(
+            self.admin_site.each_context(request),
+            opts=self.model._meta,
+            title="Import rozliczeń z JPK_EWP",
+        )
+
+        if request.method == "POST" and request.FILES.get("xml_file"):
+            xml_file = request.FILES["xml_file"]
+            try:
+                if xml_file.size > 50 * 1024 * 1024:  # 50MB
+                    messages.error(
+                        request, "Plik jest za duży (maksymalny rozmiar to 50MB)."
+                    )
+                    return render(
+                        request,
+                        "admin/ksiegowosc/monthlysettlement/import_jpk_ewp.html",
+                        context,
+                    )
+                if not xml_file.name.lower().endswith(".xml"):
+                    messages.error(
+                        request,
+                        "Nieprawidłowe rozszerzenie pliku. Wymagany jest plik .xml.",
+                    )
+                    return render(
+                        request,
+                        "admin/ksiegowosc/monthlysettlement/import_jpk_ewp.html",
+                        context,
+                    )
+
+                with transaction.atomic():
+                    created_count, updated_count, warnings = self.parse_jpk_ewp_file(
+                        xml_file, request.user
+                    )
+
+                # Bardziej szczegółowy komunikat o sukcesie
+                if created_count or updated_count:
+                    msg = f"Import zakończony pomyślnie. Utworzono: {created_count}, zaktualizowano: {updated_count} rozliczeń."
+                    messages.success(request, msg)
+                else:
+                    messages.info(
+                        request, "Nie znaleziono nowych danych do importu w pliku."
+                    )
+
+                # Dodawanie ostrzeżeń za pomocą messages framework
+                for warning in warnings:
+                    messages.add_message(request, messages.WARNING, warning)
+
+                return redirect("admin:ksiegowosc_monthlysettlement_changelist")
+
+            except ValueError as e:
+                messages.error(request, str(e))
+            except Exception as e:
+                messages.error(
+                    request,
+                    f"Wystąpił nieoczekiwany błąd podczas przetwarzania pliku: {str(e)}",
+                )
+
+        return render(
+            request, "admin/ksiegowosc/monthlysettlement/import_jpk_ewp.html", context
+        )
+
+    # Nowa metoda do parsowania pliku JPK_EWP
+    def parse_jpk_ewp_file(self, xml_file, user):
+        try:
+            xml_content = xml_file.read()
+            if isinstance(xml_content, bytes):
+                try:
+                    xml_content = xml_content.decode("utf-8")
+                except UnicodeDecodeError:
+                    try:
+                        xml_content = xml_content.decode("windows-1250")
+                    except UnicodeDecodeError:
+                        xml_content = xml_content.decode("iso-8859-2")
+
+            if "JPK" not in xml_content:
+                raise ValueError("Plik nie wygląda na plik JPK.")
+
+            root = ET.fromstring(xml_content)
+            namespaces = {"tns": "http://jpk.mf.gov.pl/wzor/2022/02/01/02011/"}
+            ewp_wiersze = root.findall("tns:EWPWiersz", namespaces)
+
+            if not ewp_wiersze:
+                raise ValueError("Nie znaleziono żadnych wpisów w pliku JPK_EWP.")
+
+            monthly_revenues = {}
+            for wiersz in ewp_wiersze:
+                date_str = wiersz.find("tns:K_2", namespaces).text
+                date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                year_month = (date.year, date.month)
+
+                revenue = Decimal(wiersz.find("tns:K_7", namespaces).text) + Decimal(
+                    wiersz.find("tns:K_11", namespaces).text
+                )
+
+                if year_month not in monthly_revenues:
+                    monthly_revenues[year_month] = Decimal("0.00")
+                monthly_revenues[year_month] += revenue
+
+            created_count = 0
+            updated_count = 0
+            import_warnings = []
+            updated_settlements_exist = False
+
+            for (year, month), total_revenue in monthly_revenues.items():
+                settlement, created = MonthlySettlement.objects.update_or_create(
+                    user=user,
+                    year=year,
+                    month=month,
+                    defaults={
+                        "total_revenue": total_revenue,
+                        "health_insurance_paid": 0,
+                        "social_insurance_paid": 0,
+                        "labor_fund_paid": 0,
+                        "income_tax_payable": 0,
+                    },
+                )
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+
+            warnings = []
+            if created_count or updated_count:
+                warnings.append(
+                    "Pamiętaj, aby uzupełnić informacje o zapłaconych składkach ZUS (zdrowotne, społeczne, fundusz pracy) dla zaimportowanych miesięcy."
+                )
+
+            return created_count, updated_count, warnings
+        except ET.ParseError as e:
+            raise ValueError(f"Błąd parsowania XML: {str(e)}")
+
+    def dashboard_view(self, request):
+        """Dashboard z integracją rozliczenia rocznego i płatności"""
+
+        context = {
+            "opts": self.model._meta,
+            "title": "Dashboard - Podsumowanie działalności",
+            "current_year": datetime.now().year,
+            "current_month": datetime.now().month,
+        }
+
+        current_year = datetime.now().year
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365)
+        today = timezone.now().date()
+
+        # === DANE ROZLICZENIA ROCZNEGO ===
+        current_yearly_settlement = YearlySettlement.objects.filter(
+            user=request.user, year=current_year
+        ).first()
+
+        # Oblicz aktualny stan w roku
+        current_year_summary = {
+            "total_revenue": Invoice.objects.filter(
+                user=request.user, issue_date__year=current_year
+            ).aggregate(total=Sum("total_amount"))["total"]
+            or Decimal("0"),
+            "total_social_insurance": MonthlySettlement.objects.filter(
+                user=request.user, year=current_year
+            ).aggregate(total=Sum("social_insurance_paid"))["total"]
+            or Decimal("0"),
+            "total_health_insurance": MonthlySettlement.objects.filter(
+                user=request.user, year=current_year
+            ).aggregate(total=Sum("health_insurance_paid"))["total"]
+            or Decimal("0"),
+            "total_labor_fund": MonthlySettlement.objects.filter(
+                user=request.user, year=current_year
+            ).aggregate(total=Sum("labor_fund_paid"))["total"]
+            or Decimal("0"),
+            "total_monthly_tax": MonthlySettlement.objects.filter(
+                user=request.user, year=current_year
+            ).aggregate(total=Sum("income_tax_payable"))["total"]
+            or Decimal("0"),
+        }
+
+        # Oblicz prognozowaną podstawę opodatkowania i podatek
+        tax_base = (
+            current_year_summary["total_revenue"]
+            - current_year_summary["total_social_insurance"]
+        )
+        tax_base_after_health = tax_base - (
+            current_year_summary["total_health_insurance"] / 2
+        )
+        if tax_base_after_health < 0:
+            tax_base_after_health = Decimal("0")
+
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        tax_rate = Decimal("14.0")
+        if company_info and company_info.lump_sum_rate:
+            tax_rate = Decimal(company_info.lump_sum_rate)
+
+        projected_yearly_tax = (tax_base_after_health * tax_rate / 100).quantize(
+            Decimal("0.01")
+        )
+        projected_difference = (
+            projected_yearly_tax - current_year_summary["total_monthly_tax"]
+        )
+
+        current_year_summary.update(
+            {
+                "tax_base": tax_base,
+                "tax_base_after_health": tax_base_after_health,
+                "projected_yearly_tax": projected_yearly_tax,
+                "projected_difference": projected_difference,
+                "tax_rate": tax_rate,
+            }
+        )
+
+        context["current_year_summary"] = current_year_summary
+        context["current_yearly_settlement"] = current_yearly_settlement
+        context["company_info"] = company_info
+
+        # === STATYSTYKI PŁATNOŚCI ===
+        payment_stats = {
+            "total_outstanding": Invoice.objects.filter(user=request.user).aggregate(
+                total=Sum("total_amount")
+            )["total"]
+            or Decimal("0"),
+            "total_paid": Payment.objects.filter(
+                user=request.user, status="completed"
+            ).aggregate(total=Sum("amount"))["total"]
+            or Decimal("0"),
+            "overdue_count": Invoice.objects.filter(
+                user=request.user, payment_date__lt=today
+            )
+            .annotate(paid_sum=Sum("payments__amount"))
+            .exclude(paid_sum__gte=F("total_amount"))
+            .count(),
+        }
+
+        payment_stats["balance_due"] = (
+            payment_stats["total_outstanding"] - payment_stats["total_paid"]
+        )
+
+        # === PORÓWNANIE Z POPRZEDNIM ROKIEM ===
+        previous_year = current_year - 1
+        previous_year_data = {
+            "total_revenue": Invoice.objects.filter(
+                user=request.user, issue_date__year=previous_year
+            ).aggregate(total=Sum("total_amount"))["total"]
+            or Decimal("0"),
+            "total_tax_paid": MonthlySettlement.objects.filter(
+                user=request.user, year=previous_year
+            ).aggregate(total=Sum("income_tax_payable"))["total"]
+            or Decimal("0"),
+        }
+
+        revenue_change = 0
+        tax_change = 0
+        if previous_year_data["total_revenue"] > 0:
+            revenue_change = (
+                (
+                    current_year_summary["total_revenue"]
+                    - previous_year_data["total_revenue"]
+                )
+                / previous_year_data["total_revenue"]
+                * 100
+            )
+        if previous_year_data["total_tax_paid"] > 0:
+            tax_change = (
+                (
+                    current_year_summary["total_monthly_tax"]
+                    - previous_year_data["total_tax_paid"]
+                )
+                / previous_year_data["total_tax_paid"]
+                * 100
+            )
+
+        context["previous_year_data"] = previous_year_data
+        context["revenue_change"] = revenue_change
+        context["tax_change"] = tax_change
+
+        # === PROGRES ROKU PODATKOWEGO ===
+        start_of_year = datetime(current_year, 1, 1)
+        end_of_year = datetime(current_year, 12, 31)
+        days_in_year = (end_of_year - start_of_year).days + 1
+        days_passed = (datetime.now() - start_of_year).days + 1
+        year_progress = (days_passed / days_in_year) * 100
+
+        if days_passed > 0:
+            daily_revenue = current_year_summary["total_revenue"] / days_passed
+            projected_end_year_revenue = daily_revenue * days_in_year
+
+            daily_tax = current_year_summary["total_monthly_tax"] / days_passed
+            projected_end_year_tax = daily_tax * days_in_year
+        else:
+            projected_end_year_revenue = current_year_summary["total_revenue"]
+            projected_end_year_tax = current_year_summary["total_monthly_tax"]
+
+        context["year_progress"] = {
+            "percentage": round(year_progress, 1),
+            "days_passed": days_passed,
+            "days_total": days_in_year,
+            "projected_end_year_revenue": projected_end_year_revenue,
+            "projected_end_year_tax": projected_end_year_tax,
+        }
+
+        # === WYKRES PODSTAWY OPODATKOWANIA ===
+        monthly_tax_base = []
+        tax_base_labels = []
+
+        for month in range(1, 13):
+            monthly_revenue = Invoice.objects.filter(
+                user=request.user,
+                issue_date__year=current_year,
+                issue_date__month=month,
+            ).aggregate(total=Sum("total_amount"))["total"] or Decimal("0")
+
+            monthly_social = MonthlySettlement.objects.filter(
+                user=request.user, year=current_year, month=month
+            ).aggregate(total=Sum("social_insurance_paid"))["total"] or Decimal("0")
+
+            base = monthly_revenue - monthly_social
+            monthly_tax_base.append(float(base))
+            tax_base_labels.append(f"{month:02d}/{current_year}")
+
+        context["tax_base_chart"] = {
+            "labels": json.dumps(tax_base_labels),
+            "data": json.dumps(monthly_tax_base),
+        }
+
+        # === WYKRES PORÓWNANIA LAT ===
+        years_comparison = []
+        comparison_labels = []
+
+        for year in range(current_year - 2, current_year + 1):
+            yearly_revenue = Invoice.objects.filter(
+                user=request.user, issue_date__year=year
+            ).aggregate(total=Sum("total_amount"))["total"] or Decimal("0")
+
+            years_comparison.append(float(yearly_revenue))
+            comparison_labels.append(str(year))
+
+        context["years_comparison_chart"] = {
+            "labels": json.dumps(comparison_labels),
+            "data": json.dumps(years_comparison),
+        }
+
+        # === WYKRES PRZYCHODÓW MIESIĘCZNYCH ===
+        monthly_revenue = (
+            Invoice.objects.filter(user=request.user, issue_date__gte=start_date)
+            .annotate(month=TruncMonth("issue_date"))
+            .values("month")
+            .annotate(total=Sum("total_amount"))
+            .order_by("month")
+        )
+
+        revenue_labels = []
+        revenue_data = []
+        for item in monthly_revenue:
+            revenue_labels.append(item["month"].strftime("%Y-%m"))
+            revenue_data.append(float(item["total"] or 0))
+
+        context["revenue_chart"] = {
+            "labels": json.dumps(revenue_labels),
+            "data": json.dumps(revenue_data),
+        }
+
+        # === DANE DLA WYKRESU PŁATNOŚCI ===
+        monthly_payments = (
+            Payment.objects.filter(
+                user=request.user, payment_date__gte=start_date, status="completed"
+            )
+            .annotate(month=TruncMonth("payment_date"))
+            .values("month")
+            .annotate(total=Sum("amount"))
+            .order_by("month")
+        )
+
+        payments_labels = []
+        payments_data = []
+        for item in monthly_payments:
+            payments_labels.append(item["month"].strftime("%Y-%m"))
+            payments_data.append(float(item["total"] or 0))
+
+        # === STATYSTYKI STATUSÓW PŁATNOŚCI ===
+        payment_status_stats = {
+            "paid": Invoice.objects.filter(user=request.user)
+            .annotate(paid_sum=Sum("payments__amount"))
+            .filter(paid_sum__gte=F("total_amount"))
+            .distinct()
+            .count(),
+            "partial": Invoice.objects.filter(user=request.user)
+            .annotate(paid_sum=Sum("payments__amount"))
+            .filter(paid_sum__gt=0, paid_sum__lt=F("total_amount"))
+            .distinct()
+            .count(),
+            "overdue": Invoice.objects.filter(user=request.user, payment_date__lt=today)
+            .annotate(paid_sum=Sum("payments__amount"))
+            .exclude(paid_sum__gte=F("total_amount"))
+            .count(),
+            "unpaid": Invoice.objects.filter(user=request.user)
+            .filter(payments__isnull=True)
+            .count(),
+        }
+
+        # Ostatnie faktury
+        recent_invoices = Invoice.objects.filter(user=request.user).order_by(
+            "-issue_date"
+        )[:5]
+        context["recent_invoices"] = recent_invoices
+
+        # Miesięczne rozliczenia do sprawdzenia
+        pending_settlements = []
+        for month in range(1, 13):
+            if not MonthlySettlement.objects.filter(
+                user=request.user, year=current_year, month=month
+            ).exists():
+                if month <= datetime.now().month:
+                    pending_settlements.append(month)
+
+        context["pending_settlements"] = pending_settlements
+
+        # === TERMINY I PRZYPOMNIENIA ===
+        reminders = []
+
+        if datetime.now().month == 12:
+            reminders.append(
+                {
+                    "type": "warning",
+                    "icon": "fas fa-calendar-alt",
+                    "title": "Zbliża się koniec roku podatkowego",
+                    "message": "Pamiętaj o przygotowaniu rozliczenia rocznego do 31 stycznia.",
+                    "action_url": "admin:ksiegowosc_yearlysettlement_calculate",
+                    "action_text": "Sprawdź rozliczenie",
+                }
+            )
+
+        if datetime.now().month <= 3:
+            if not YearlySettlement.objects.filter(
+                user=request.user, year=previous_year
+            ).exists():
+                reminders.append(
+                    {
+                        "type": "danger",
+                        "icon": "fas fa-exclamation-triangle",
+                        "title": f"Brak rozliczenia rocznego za {previous_year}",
+                        "message": f"Termin składania rozliczenia rocznego za {previous_year} mija 31 stycznia {current_year}.",
+                        "action_url": "admin:ksiegowosc_yearlysettlement_calculate",
+                        "action_text": "Oblicz teraz",
+                    }
+                )
+
+        if abs(projected_difference) > 1000:
+            if projected_difference > 0:
+                reminders.append(
+                    {
+                        "type": "warning",
+                        "icon": "fas fa-money-bill-wave",
+                        "title": "Prognozowana dopłata podatku",
+                        "message": f"Na koniec roku możesz mieć dopłatę około {projected_difference:.0f} PLN.",
+                        "action_url": "admin:ksiegowosc_monthlysettlement_calculate",
+                        "action_text": "Sprawdź rozliczenia",
+                    }
+                )
+            else:
+                reminders.append(
+                    {
+                        "type": "success",
+                        "icon": "fas fa-coins",
+                        "title": "Prognozowany zwrot podatku",
+                        "message": f"Na koniec roku możesz mieć zwrot około {abs(projected_difference):.0f} PLN.",
+                        "action_url": "admin:ksiegowosc_yearlysettlement_calculate",
+                        "action_text": "Zobacz szczegóły",
+                    }
+                )
+
+        # Dodaj do kontekstu
+        context["payment_stats"] = payment_stats
+        context["payments_chart"] = {
+            "labels": json.dumps(payments_labels),
+            "data": json.dumps(payments_data),
+        }
+        context["payment_status_stats"] = payment_status_stats
+        context["reminders"] = reminders
+
+        return render(request, "admin/enhanced_dashboard.html", context)
+
+    def calculate_view(self, request):
+        """Widok do obliczania rozliczenia miesięcznego"""
+
+        context = {
+            "opts": self.model._meta,
+            "title": "Obliczanie Rozliczenia Miesięcznego",
+        }
+
+        current_year = datetime.now().year
+        context["years"] = list(range(current_year - 5, current_year + 1))
+        context["months"] = list(range(1, 13))
+
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        context["company_info"] = company_info
+
+        if company_info:
+            try:
+                zus_rates = ZUSRates.get_current_rates()
+                if zus_rates:
+                    calculated_rates = zus_rates.calculate_social_insurance(
+                        company_info
+                    )
+                    context["calculated_rates"] = calculated_rates
+                    context["zus_rates"] = zus_rates
+            except Exception as e:
+                context["zus_rates"] = None
+                context["calculated_rates"] = None
+
+        if request.method == "POST":
+            try:
+                month = int(request.POST.get("month"))
+                year = int(request.POST.get("year"))
+
+                health_insurance = Decimal(
+                    request.POST.get("health_insurance_paid", "0").replace(",", ".")
+                )
+                social_insurance = Decimal(
+                    request.POST.get("social_insurance_paid", "0").replace(",", ".")
+                )
+                labor_fund = Decimal(
+                    request.POST.get("labor_fund_paid", "0").replace(",", ".")
+                )
+
+                total_revenue = Invoice.objects.filter(
+                    user=request.user, issue_date__year=year, issue_date__month=month
+                ).aggregate(total=Sum("total_amount"))["total"] or Decimal("0.00")
+
+                tax_base_revenue = total_revenue - social_insurance
+                tax_base_after_health = tax_base_revenue - (health_insurance / 2)
+                if tax_base_after_health < 0:
+                    tax_base_after_health = Decimal("0.00")
+
+                income_tax_payable = round(tax_base_after_health * Decimal("0.14"))
+
+                settlement, created = MonthlySettlement.objects.update_or_create(
+                    user=request.user,
+                    year=year,
+                    month=month,
+                    defaults={
+                        "total_revenue": total_revenue,
+                        "health_insurance_paid": health_insurance,
+                        "social_insurance_paid": social_insurance,
+                        "labor_fund_paid": labor_fund,
+                        "income_tax_payable": income_tax_payable,
+                    },
+                )
+
+                context["settlement"] = settlement
+                context["submitted"] = True
+
+            except Exception as e:
+                messages.error(request, f"Błąd podczas obliczania: {e}")
+
+        return render(request, "ksiegowosc/settlement_form.html", context)
+
+    def zus_calculator_view(self, request):
+        """Widok kalkulatora składek ZUS"""
+        context = {
+            "opts": self.model._meta,
+            "title": "Kalkulator składek ZUS",
+            "current_year": timezone.now().year,
+        }
+
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        context["company_info"] = company_info
+
+        try:
+            zus_rates = ZUSRates.get_current_rates()
+            context["zus_rates"] = zus_rates
+        except:
+            zus_rates = None
+            context["zus_rates"] = None
+
+        if company_info and zus_rates:
+            annual_income = request.GET.get("annual_income")
+            if annual_income:
+                try:
+                    annual_income = Decimal(annual_income)
+                except:
+                    annual_income = None
+
+            calculated_rates = zus_rates.calculate_social_insurance(
+                company_info, annual_income
+            )
+            context["calculated_rates"] = calculated_rates
+
+        return render(request, "ksiegowosc/zus_calculator.html", context)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, "user") or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
+
+
+# ==== YEARLY SETTLEMENT ADMIN ====
+
+
+@admin.register(YearlySettlement)
+class YearlySettlementAdmin(admin.ModelAdmin):
+    change_list_template = "admin/ksiegowosc/yearlysettlement/change_list.html"
+    list_display = (
+        "year",
+        "total_yearly_revenue",
+        "calculated_yearly_tax",
+        "tax_difference",
+        "get_settlement_type_display",
+        "user",
+    )
+    list_filter = ("year", "user")
+    readonly_fields = (
+        "tax_difference",
+        "calculated_yearly_tax",
+        "total_yearly_revenue",
+        "created_at",
+    )
+    exclude = ("user",)
+
+    fieldsets = (
+        ("Podstawowe informacje", {"fields": ("year", "tax_rate_used")}),
+        (
+            "Podsumowanie przychodów",
+            {
+                "fields": ("total_yearly_revenue",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Składki ZUS",
+            {
+                "fields": (
+                    "total_social_insurance_paid",
+                    "total_health_insurance_paid",
+                    "total_labor_fund_paid",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Obliczenia podatkowe",
+            {
+                "fields": (
+                    "total_monthly_tax_paid",
+                    "calculated_yearly_tax",
+                    "tax_difference",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Dodatkowe",
+            {
+                "fields": ("notes", "created_at"),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path(
+                "oblicz-roczne/",
+                self.admin_site.admin_view(self.calculate_yearly_view),
+                name="ksiegowosc_yearlysettlement_calculate",
+            ),
+            path(
+                "<int:object_id>/pdf/",
+                self.admin_site.admin_view(self.generate_yearly_pdf_view),
+                name="ksiegowosc_yearlysettlement_pdf",
+            ),
+            path(
+                "<int:object_id>/podglad/",
+                self.admin_site.admin_view(self.view_yearly_settlement),
+                name="ksiegowosc_yearlysettlement_view",
+            ),
+        ]
+        return my_urls + urls
+
+    def calculate_yearly_view(self, request):
+        context = {
+            "opts": self.model._meta,
+            "title": "Obliczanie Rozliczenia Rocznego",
+        }
+
+        if request.method == "POST":
+            year = int(request.POST.get("year"))
+            tax_rate = Decimal(request.POST.get("tax_rate", "14.00"))
+            notes = request.POST.get("notes", "")
+
+            monthly_settlements = MonthlySettlement.objects.filter(
+                user=request.user, year=year
+            ).order_by("month")
+
+            if not monthly_settlements.exists():
+                messages.error(
+                    request,
+                    f"Brak rozliczeń miesięcznych za rok {year}. Najpierw utwórz rozliczenia miesięczne.",
+                )
+                current_year = datetime.now().year
+                context.update({"years": range(current_year - 5, current_year + 1)})
+                return render(
+                    request, "ksiegowosc/yearly_settlement_form.html", context
+                )
+
+            yearly_totals = monthly_settlements.aggregate(
+                total_revenue=Sum("total_revenue"),
+                total_social=Sum("social_insurance_paid"),
+                total_health=Sum("health_insurance_paid"),
+                total_labor=Sum("labor_fund_paid"),
+                total_monthly_tax=Sum("income_tax_payable"),
+            )
+
+            total_yearly_revenue = yearly_totals["total_revenue"] or Decimal("0.00")
+            total_social_insurance = yearly_totals["total_social"] or Decimal("0.00")
+            total_health_insurance = yearly_totals["total_health"] or Decimal("0.00")
+            total_labor_fund = yearly_totals["total_labor"] or Decimal("0.00")
+            total_monthly_tax_paid = yearly_totals["total_monthly_tax"] or Decimal(
+                "0.00"
+            )
+
+            tax_base = total_yearly_revenue - total_social_insurance
+            tax_base_after_health = tax_base - (total_health_insurance / 2)
+            if tax_base_after_health < 0:
+                tax_base_after_health = Decimal("0.00")
+
+            calculated_yearly_tax = (tax_base_after_health * tax_rate / 100).quantize(
+                Decimal("0.01")
+            )
+            tax_difference = calculated_yearly_tax - total_monthly_tax_paid
+
+            yearly_settlement, created = YearlySettlement.objects.update_or_create(
+                user=request.user,
+                year=year,
+                defaults={
+                    "total_yearly_revenue": total_yearly_revenue,
+                    "total_social_insurance_paid": total_social_insurance,
+                    "total_health_insurance_paid": total_health_insurance,
+                    "total_labor_fund_paid": total_labor_fund,
+                    "total_monthly_tax_paid": total_monthly_tax_paid,
+                    "calculated_yearly_tax": calculated_yearly_tax,
+                    "tax_difference": tax_difference,
+                    "tax_rate_used": tax_rate,
+                    "notes": notes,
+                },
+            )
+
+            context["yearly_settlement"] = yearly_settlement
+            context["monthly_settlements"] = monthly_settlements
+            context["submitted"] = True
+            context["created"] = created
+
+        current_year = datetime.now().year
+        context.update(
+            {
+                "years": range(current_year - 5, current_year + 1),
+                "default_tax_rate": "14.00",
+            }
+        )
+        return render(request, "ksiegowosc/yearly_settlement_form.html", context)
+
+    def generate_yearly_pdf_view(self, request, object_id):
+        from weasyprint import HTML  # Import wewnątrz metody
+
+        """Generuje PDF z rozliczeniem rocznym"""
+        queryset = self.get_queryset(request)
+        try:
+            yearly_settlement = queryset.get(pk=object_id)
+        except YearlySettlement.DoesNotExist:
+            messages.error(
+                request,
+                "Rozliczenie roczne nie zostało znalezione lub nie masz do niego uprawnień.",
+            )
+            return redirect(request.META.get("HTTP_REFERER", "/admin/"))
+
+        company_info = CompanyInfo.objects.filter(user=request.user).first()
+        if not company_info:
+            messages.error(
+                request,
+                "Nie można wygenerować PDF. Uzupełnij najpierw dane firmy w panelu.",
+            )
+            return redirect(request.META.get("HTTP_REFERER", "/admin/"))
+
+        monthly_settlements = MonthlySettlement.objects.filter(
+            user=request.user, year=yearly_settlement.year
+        ).order_by("month")
+
+        html_string = render_to_string(
+            "ksiegowosc/yearly_settlement_pdf_template.html",
+            {
+                "yearly_settlement": yearly_settlement,
+                "company_info": company_info,
+                "monthly_settlements": monthly_settlements,
+            },
+        )
+
+        html = HTML(string=html_string)
+        pdf = html.write_pdf()
+
+        response = HttpResponse(pdf, content_type="application/pdf")
+        filename = f"rozliczenie-roczne-{yearly_settlement.year}_{company_info.company_name.replace(' ', '_')}.pdf"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    def view_yearly_settlement(self, request, object_id):
+        """Wyświetla pełny podgląd rozliczenia rocznego"""
+        queryset = self.get_queryset(request)
+        try:
+            yearly_settlement = queryset.get(pk=object_id)
+        except YearlySettlement.DoesNotExist:
+            messages.error(
+                request,
+                "Rozliczenie roczne nie zostało znalezione lub nie masz do niego uprawnień.",
+            )
+            return redirect("admin:ksiegowosc_yearlysettlement_changelist")
+
+        monthly_settlements = MonthlySettlement.objects.filter(
+            user=request.user, year=yearly_settlement.year
+        ).order_by("month")
+
+        context = {
+            "opts": self.model._meta,
+            "title": f"Podgląd rozliczenia rocznego {yearly_settlement.year}",
+            "yearly_settlement": yearly_settlement,
+            "monthly_settlements": monthly_settlements,
+            "submitted": True,
+            "view_mode": True,
+        }
+
+        return render(request, "ksiegowosc/yearly_settlement_view.html", context)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, "user") or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
+
+
+# ==== ZUS RATES ADMIN ====
+
+
+@admin.register(ZUSRates)
+class ZUSRatesAdmin(admin.ModelAdmin):
+    list_display = ("year", "minimum_wage", "minimum_base", "is_current", "updated_at")
+    list_filter = ("year", "is_current")
+    readonly_fields = ("updated_at",)
+
+    fieldsets = (
+        (
+            "Podstawowe informacje",
+            {"fields": ("year", "is_current", "source_url", "updated_at")},
+        ),
+        ("Podstawy wymiaru", {"fields": ("minimum_wage", "minimum_base")}),
+        (
+            "Stawki składek społecznych",
+            {"fields": ("pension_rate", "disability_rate", "accident_rate")},
+        ),
+        (
+            "Inne składki",
+            {
+                "fields": (
+                    "labor_fund_rate",
+                    "health_insurance_rate",
+                    "health_insurance_deductible_rate",
+                )
+            },
+        ),
+        (
+            "Preferencje i ulgi",
+            {
+                "fields": (
+                    "preferential_pension_rate",
+                    "preferential_months",
+                    "small_zus_plus_threshold",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path(
+                "aktualizuj-stawki/",
+                self.admin_site.admin_view(self.update_rates_view),
+                name="ksiegowosc_zusrates_update",
+            ),
+        ]
+        return my_urls + urls
+
+    def update_rates_view(self, request):
+        """Widok do ręcznej aktualizacji stawek ZUS"""
+        from django.core.management import call_command
+        from io import StringIO
+
+        if request.method == "POST":
+            try:
+                out = StringIO()
+                call_command("update_zus_rates", "--force", stdout=out)
+                output = out.getvalue()
+
+                messages.success(
+                    request, f"Stawki ZUS zostały zaktualizowane!\n{output}"
+                )
+            except Exception as e:
+                messages.error(request, f"Błąd aktualizacji: {str(e)}")
+
+        return redirect("admin:ksiegowosc_zusrates_changelist")
+
+
+# ==== PURCHASE INVOICE ADMIN ====
+
+
+@admin.register(PurchaseInvoice)
+class PurchaseInvoiceAdmin(admin.ModelAdmin):
+    list_display = (
+        "invoice_number",
+        "supplier",
+        "issue_date",
+        "total_amount",
+        "category",
+        "payment_status_colored",
+        "user",
+    )
+    list_filter = ("category", "is_paid", "issue_date", "supplier", "user")
+    search_fields = ("invoice_number", "supplier__name", "description")
+    readonly_fields = ("created_at", "updated_at")
+    exclude = ("user",)
+    autocomplete_fields = ["supplier"]
+
+    def payment_status_colored(self, obj):
+        status = obj.payment_status
+        colors = {
+            "paid": "green",
+            "overdue": "red",
+            "pending": "orange",
+        }
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            colors.get(status, "black"),
+            obj.payment_status_display,
+        )
+
+    payment_status_colored.short_description = "Status płatności"
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, "user") or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
+
+
+# ==== EXPENSE CATEGORY ADMIN ====
+
+
+@admin.register(ExpenseCategory)
+class ExpenseCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "is_active", "user")
+    list_filter = ("is_active", "user")
+    search_fields = ("name", "code")
+    exclude = ("user",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, "user") or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
