@@ -1,0 +1,39 @@
+# =============================================================================
+# Zależności dla Moja Fakturownia
+# =============================================================================
+
+# CORE
+Django==5.2.3
+django-environ
+gunicorn
+whitenoise
+psycopg2-binary
+dj-database-url
+
+# ADMIN & UI
+django-jazzmin
+django-crispy-forms
+crispy-bootstrap4
+
+# UTILITIES
+requests
+python-dateutil
+Pillow
+pytz
+
+# API & INTEGRATIONS
+djangorestframework
+social-auth-app-django
+ksef-utils
+signxml
+pyOpenSSL
+cryptography
+
+# MONITORING & DEBUGGING
+django-health-check
+sentry-sdk[django]
+django-extensions
+debugpy
+
+# BACKUP
+django-dbbackup
