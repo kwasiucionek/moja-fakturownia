@@ -1344,6 +1344,72 @@ class PurchaseInvoice(models.Model):
         return "0%"
 
 
+class InvoiceItem(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    invoice = models.ForeignKey(
+        Invoice,
+        related_name="items",
+        on_delete=models.CASCADE,
+        verbose_name="Faktura",
+    )
+    name = models.CharField(max_length=255, verbose_name="Nazwa towaru/usługi")
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=2, default=1.00, verbose_name="Ilość"
+    )
+    unit = models.CharField(max_length=10, default="szt.", verbose_name="J.M.")
+    unit_price = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Cena jednostkowa"
+    )
+    total_price = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Wartość całkowita"
+    )
+
+    # Używamy listy stawek zdefiniowanej już w CompanyInfo
+    lump_sum_tax_rate = models.CharField(
+        max_length=10,
+        choices=CompanyInfo.LUMP_SUM_RATES,
+        blank=True,
+        null=True,
+        verbose_name="Stawka ryczałtu (%)",
+    )
+
+    # Pola dla faktur korygujących (używane w admin.py)
+    corrected_item = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="corrections",
+        verbose_name="Pozycja korygowana (stan 'przed korektą')",
+    )
+
+    class Meta:
+        verbose_name = "Pozycja faktury"
+        verbose_name_plural = "Pozycje faktur"
+
+    def __str__(self):
+        return f"{self.name} ({self.quantity} {self.unit})"
+
+    def save(self, *args, **kwargs):
+        # Automatyczne obliczenie wartości całkowitej
+        # Używamy Decimal, aby zapewnić precyzję
+        self.total_price = Decimal(self.quantity) * Decimal(self.unit_price)
+
+        # Upewnij się, że użytkownik jest przypisany (jeśli nie jest)
+        if not self.user_id and self.invoice:
+            self.user = self.invoice.user
+
+        super().save(*args, **kwargs)
+        # Po zapisaniu pozycji, zaktualizuj sumę na fakturze
+        self.invoice.update_total_amount()
+
+    def delete(self, *args, **kwargs):
+        invoice = self.invoice
+        super().delete(*args, **kwargs)
+        # Po usunięciu pozycji, zaktualizuj sumę na fakturze
+        invoice.update_total_amount()
+
+
 class PurchaseInvoiceItem(models.Model):
     """Pozycje na fakturach zakupu"""
 
