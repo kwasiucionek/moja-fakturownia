@@ -684,7 +684,6 @@ class Invoice(models.Model):
     invoice_number = models.CharField(max_length=50, verbose_name="Numer faktury")
     issue_date = models.DateField(default=timezone.now, verbose_name="Data wystawienia")
     sale_date = models.DateField(default=timezone.now, verbose_name="Data sprzedaży")
-    # USUNIĘTA ZDUPLOWANA LINIA Z TEGO MIEJSCA
     contractor = models.ForeignKey(
         "Contractor", on_delete=models.PROTECT, verbose_name="Kontrahent"
     )
@@ -703,7 +702,7 @@ class Invoice(models.Model):
         default="unpaid",
         verbose_name="Status płatności",
     )
-    payment_date = models.DateField(  # <-- ZOSTAWIAMY TĘ WERSJĘ
+    payment_date = models.DateField(
         verbose_name="Termin płatności", blank=True, null=True
     )
     notes = models.TextField(blank=True, null=True, verbose_name="Uwagi")
@@ -729,7 +728,7 @@ class Invoice(models.Model):
         verbose_name="Numer referencyjny KSeF",
     )
     ksef_status = models.CharField(
-        max_length=20,
+        max_length=50,  # Zwiększona długość do 50
         blank=True,
         null=True,
         verbose_name="Status w KSeF",
