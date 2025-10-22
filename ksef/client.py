@@ -3,9 +3,9 @@
 import requests
 from django.conf import settings
 
-# === OSTATECZNA POPRAWKA IMPORTU ===
+# Importujemy klasy konfiguracyjne i KSEFService
 from ksef_utils.server import KSEFService
-from ksef_utils.config import TestConfig, ProdConfig  # Importujemy klasy konfiguracyjne
+from ksef_utils.config import TestConfig, ProdConfig
 from ksiegowosc.models import CompanyInfo
 
 
@@ -19,11 +19,11 @@ class KsefClient:
         if not self.company_info.ksef_token:
             raise Exception("Brak tokena KSeF w ustawieniach firmy.")
 
-        # === OSTATECZNY POPRAWIONY BLOK KODU ===
+        # Wybieramy i inicjujemy odpowiednią klasę konfiguracyjną
         env_str = self.company_info.ksef_environment
-        # Inicjujemy odpowiednią klasę konfiguracyjną
         config_obj = TestConfig() if env_str == "test" else ProdConfig()
 
+        # Przekazujemy instancję obiektu konfiguracyjnego do KSEFService
         self.service = KSEFService(config_obj)
 
         self.session = None
