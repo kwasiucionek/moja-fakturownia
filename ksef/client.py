@@ -31,15 +31,34 @@ class KsefClient:
 
         env = self.company_info.ksef_environment
         if env == "test":
-            self.base_url = "https://ksef-test.mf.gov.pl/api/v2"  # POPRAWIONY URL
+            self.base_url = "https://ksef-test.mf.gov.pl/api/v2"
         else:
             self.base_url = "https://ksef.mf.gov.pl/api/v2"
+
+        # Znormalizuj NIP (usuń myślniki i spacje)
+        self.nip = self._normalize_nip(self.company_info.tax_id)  # ← DODAJ TO
 
         self.access_token = None
         self.refresh_token = None
         self.public_key_cert = None
         self.aes_key = None
         self.aes_iv = None
+
+    def _normalize_nip(self, nip: str) -> str:
+        """
+        Usuwa myślniki i spacje z NIP-u, zwraca tylko cyfry
+        """
+        if not nip:
+            raise Exception("Brak numeru NIP")
+
+        normalized = nip.replace("-", "").replace(" ", "").strip()
+
+        # Walidacja: musi mieć dokładnie 10 cyfr
+        if not normalized.isdigit() or len(normalized) != 10:
+            raise Exception(f"Nieprawidłowy format NIP: {nip}. Wymagane 10 cyfr.")
+
+        logger.info(f"NIP znormalizowany: {nip} -> {normalized}")
+        return normalized
 
     def _get_public_key(self):
         """Pobiera certyfikat z kluczem publicznym KSeF do szyfrowania"""
@@ -374,18 +393,3 @@ class KsefClient:
 
         # Przechowuj NIP bez myślników
         self.nip = self._normalize_nip(self.nip)
-
-    def _normalize_nip(self, nip: str) -> str:
-        """
-        Usuwa myślniki i spacje z NIP-u, zwraca tylko cyfry
-        """
-        if not nip:
-            raise Exception("Brak numeru NIP")
-
-        normalized = nip.replace("-", "").replace(" ", "").strip()
-
-        # Walidacja: musi mieć dokładnie 10 cyfr
-        if not normalized.isdigit() or len(normalized) != 10:
-            raise Exception(f"Nieprawidłowy format NIP: {nip}. Wymagane 10 cyfr.")
-
-        return normalized
