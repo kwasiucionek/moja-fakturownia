@@ -2,7 +2,10 @@
 
 import requests
 from django.conf import settings
-from ksef_utils.server import KSEFService  # Usunięto KSEFServer
+
+# === POPRAWIONY IMPORT ===
+# Importujemy KSEFService oraz gotowe obiekty dla środowisk
+from ksef_utils.server import KSEFService, test_server, prod_server
 from ksiegowosc.models import CompanyInfo
 
 
@@ -17,10 +20,12 @@ class KsefClient:
             raise Exception("Brak tokena KSeF w ustawieniach firmy.")
 
         # === POPRAWIONY BLOK KODU ===
-        # Pobieramy środowisko ('test' lub 'prod') bezpośrednio z modelu
-        env = self.company_info.ksef_environment
-        # Przekazujemy je bezpośrednio do KSEFService
-        self.service = KSEFService(env)
+        # Wybieramy odpowiedni obiekt środowiska na podstawie ustawień w modelu
+        env_str = self.company_info.ksef_environment
+        server_obj = test_server if env_str == "test" else prod_server
+
+        # Przekazujemy ten obiekt do KSEFService
+        self.service = KSEFService(server_obj)
 
         self.session = None
 
