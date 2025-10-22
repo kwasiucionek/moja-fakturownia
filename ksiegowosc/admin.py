@@ -1,4 +1,4 @@
-# ksiegowosc/admin.py
+# kwasiucionek/moja-fakturownia/moja-fakturownia-c860f8aa353586b9765a97279fa06703d6f956c5/ksiegowosc/admin.py
 
 from django.contrib import admin
 from django.urls import path
@@ -462,9 +462,13 @@ class InvoiceAdmin(admin.ModelAdmin):
                 )
                 continue
             try:
-                client = KsefClient(request.user)
+                # === POPRAWIONA LINIA ===
+                # Używamy użytkownika z faktury, a nie zalogowanego admina
+                client = KsefClient(invoice.user)
+
                 invoice_xml = generate_invoice_xml(invoice)
                 response = client.send_invoice(invoice_xml)
+
                 invoice.ksef_status = "Wysłano"
                 invoice.ksef_sent_at = timezone.now()
                 invoice.ksef_session_id = response.get("sessionID")
@@ -475,8 +479,8 @@ class InvoiceAdmin(admin.ModelAdmin):
                 sent_count += 1
             except Exception as e:
                 error_count += 1
-                invoice.ksef_status = "Błąd"  # Zmienione
-                invoice.ksef_processing_description = str(e)  # Zmienione
+                invoice.ksef_status = "Błąd"
+                invoice.ksef_processing_description = str(e)
                 invoice.save()
                 self.message_user(
                     request,
