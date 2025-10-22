@@ -1,4 +1,4 @@
-# kwasiucionek/moja-fakturownia/moja-fakturownia-c860f8aa353586b9765a97279fa06703d6f956c5/ksiegowosc/admin.py
+# ksiegowosc/admin.py
 
 from django.contrib import admin
 from django.urls import path
@@ -475,7 +475,8 @@ class InvoiceAdmin(admin.ModelAdmin):
                 sent_count += 1
             except Exception as e:
                 error_count += 1
-                invoice.ksef_status = f"Błąd: {e}"
+                invoice.ksef_status = "Błąd"  # Zmienione
+                invoice.ksef_processing_description = str(e)  # Zmienione
                 invoice.save()
                 self.message_user(
                     request,
