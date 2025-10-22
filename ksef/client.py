@@ -3,7 +3,7 @@
 import requests
 from django.conf import settings
 
-# Importy zgodne z zainstalowaną wersją ksef-utils
+# Importujemy teraz z lokalnej kopii biblioteki
 from ksef_utils.server import KSEFService
 from ksef_utils.config import KSEFServer
 from ksiegowosc.models import CompanyInfo
