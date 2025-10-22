@@ -5,6 +5,7 @@ from django.conf import settings
 
 # === OSTATECZNA POPRAWKA IMPORTU ===
 from ksef_utils.server import KSEFService
+from ksef_utils.config import KSEFServer  # Poprawny import obiektu środowisk
 from ksiegowosc.models import CompanyInfo
 
 
@@ -19,21 +20,24 @@ class KsefClient:
             raise Exception("Brak tokena KSeF w ustawieniach firmy.")
 
         # === OSTATECZNY POPRAWIONY BLOK KODU ===
-        # KSEFService jest inicjowany bez argumentów
-        self.service = KSEFService()
+        env_str = self.company_info.ksef_environment
+
+        # Wybieramy odpowiednią wartość z KSEFServer na podstawie ustawień
+        server_env = KSEFServer.TEST if env_str == "test" else KSEFServer.PROD
+
+        # Przekazujemy ten obiekt do KSEFService
+        self.service = KSEFService(server_env)
+
         self.session = None
 
     def _initialize_session(self):
         if not self.session:
             try:
-                # Środowisko jest wybierane tutaj, za pomocą argumentu `is_test`
-                env_str = self.company_info.ksef_environment
-                is_test_env = env_str == "test"
-
+                # Metoda auth_by_token nie wymaga już flagi is_test,
+                # ponieważ środowisko zostało ustawione w konstruktorze KSEFService
                 self.session = self.service.auth_by_token(
                     nip=self.company_info.tax_id,
                     token=self.company_info.ksef_token,
-                    is_test=is_test_env,  # Przekazanie flagi środowiska
                 )
             except Exception as e:
                 raise Exception(f"Błąd inicjalizacji sesji KSeF: {e}")
