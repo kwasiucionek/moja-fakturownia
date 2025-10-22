@@ -4,9 +4,9 @@ import requests
 from django.conf import settings
 
 # === OSTATECZNA POPRAWKA IMPORTU ===
-# Importujemy KSEFService oraz obiekty środowisk z właściwego modułu
-from ksef_utils.server import KSEFService
-from ksef_utils.environments import test_env, prod_env
+# Importujemy KSEFService oraz obiekty środowisk z właściwego modułu 'online'
+from ksef_utils.online import KSEFService
+from ksef_utils.online.environments import test_env, prod_env
 from ksiegowosc.models import CompanyInfo
 
 
