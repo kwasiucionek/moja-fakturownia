@@ -1,4 +1,4 @@
-# kwasiucionek/moja-fakturownia/moja-fakturownia-4c80630ade4a7f1e9a9ce2a4356f6c77e3cdf6e6/ksiegowosc/admin.py
+# kwasiucionek/moja-fakturownia/moja-fakturownia-c860f8aa353586b9765a97279fa06703d6f956c5/ksiegowosc/admin.py
 
 from django.contrib import admin
 from django.urls import path
@@ -6,7 +6,10 @@ from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 
-# Usunięto "from weasyprint import HTML" z tego miejsca
+# Dodane importy dla KSeF
+from ksef.client import KsefClient
+from ksef.xml_generator import generate_invoice_xml
+
 from .models import (
     CompanyInfo,
     Contractor,
@@ -371,18 +374,27 @@ class InvoiceAdmin(admin.ModelAdmin):
         "payment_status_colored",
         "balance_due_colored",
         "is_correction",
+        "ksef_status_colored",  # Dodane pole
+        "ksef_reference_number",  # Dodane pole
         "user",
     )
     list_filter = (
         "issue_date",
         "contractor",
         "is_correction",
+        "ksef_status",  # Dodany filtr
         "user",
         PaymentStatusFilter,
     )
-    search_fields = ("invoice_number", "contractor__name")
-    exclude = ("user",)
-    actions = ["export_selected_to_jpk"]
+    search_fields = ("invoice_number", "contractor__name", "ksef_reference_number")
+    readonly_fields = (
+        "ksef_reference_number",
+        "ksef_status",
+        "ksef_sent_at",
+        "ksef_session_id",
+        "ksef_processing_description",
+    )
+    actions = ["export_selected_to_jpk", "send_to_ksef"]  # Dodana akcja
 
     class Media:
         css = {"all": ("admin/css/custom_admin.css",)}
@@ -419,6 +431,87 @@ class InvoiceAdmin(admin.ModelAdmin):
             return format_html('<span style="color: orange;">{} PLN</span>', balance)
 
     balance_due_colored.short_description = "Do zapłaty"
+
+    # Nowe funkcje dla KSeF
+    def ksef_status_colored(self, obj):
+        """Kolorowy status KSeF."""
+        if not obj.ksef_status:
+            return "Brak"
+
+        status = obj.ksef_status.lower()
+        color = "gray"
+        if "przetworzono" in status:
+            color = "green"
+        elif "błąd" in status or "error" in status:
+            color = "red"
+        elif "wysłano" in status or "processing" in status:
+            color = "orange"
+
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            color,
+            obj.ksef_status,
+        )
+
+    ksef_status_colored.short_description = "Status KSeF"
+    ksef_status_colored.admin_order_field = "ksef_status"
+
+    @admin.action(description="Wyślij zaznaczone faktury do KSeF")
+    def send_to_ksef(self, request, queryset):
+        """Akcja administratora do wysyłania faktur do KSeF."""
+        sent_count = 0
+        error_count = 0
+
+        for invoice in queryset:
+            if invoice.ksef_reference_number:
+                self.message_user(
+                    request,
+                    f"Faktura {invoice.invoice_number} została już wysłana do KSeF.",
+                    messages.WARNING,
+                )
+                continue
+
+            try:
+                # Inicjalizacja klienta KSeF
+                client = KsefClient(request.user)
+
+                # Generowanie XML
+                invoice_xml = generate_invoice_xml(invoice)
+
+                # Wysyłka
+                response = client.send_invoice(invoice_xml)
+
+                # Aktualizacja statusu faktury
+                invoice.ksef_status = "Wysłano"
+                invoice.ksef_sent_at = timezone.now()
+                invoice.ksef_session_id = response.get("sessionID")
+                invoice.ksef_processing_description = response.get(
+                    "processingDescription"
+                )
+                invoice.save()
+
+                sent_count += 1
+
+            except Exception as e:
+                error_count += 1
+                invoice.ksef_status = f"Błąd: {e}"
+                invoice.save()
+                self.message_user(
+                    request,
+                    f"Błąd przy wysyłce faktury {invoice.invoice_number}: {e}",
+                    messages.ERROR,
+                )
+
+        if sent_count > 0:
+            self.message_user(
+                request,
+                f"Pomyślnie wysłano {sent_count} faktur do KSeF.",
+                messages.SUCCESS,
+            )
+        if error_count > 0:
+            self.message_user(
+                request, f"Nie udało się wysłać {error_count} faktur.", messages.ERROR
+            )
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "contractor" and not request.user.is_superuser:
