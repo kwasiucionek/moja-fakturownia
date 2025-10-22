@@ -3,8 +3,7 @@
 import requests
 from django.conf import settings
 
-# === OSTATECZNA POPRAWKA IMPORTU ===
-# Prawidłowy import na podstawie analizy kodu źródłowego biblioteki
+# Importy zgodne z zainstalowaną wersją ksef-utils
 from ksef_utils.server import KSEFService
 from ksef_utils.config import KSEFServer
 from ksiegowosc.models import CompanyInfo
@@ -20,21 +19,15 @@ class KsefClient:
         if not self.company_info.ksef_token:
             raise Exception("Brak tokena KSeF w ustawieniach firmy.")
 
-        # === OSTATECZNY POPRAWIONY BLOK KODU ===
         env_str = self.company_info.ksef_environment
-
-        # Wybieramy odpowiednią wartość z KSEFServer (Enum)
         server_env = KSEFServer.TEST if env_str == "test" else KSEFServer.PROD
 
-        # Przekazujemy ten obiekt Enum do KSEFService
         self.service = KSEFService(server_env)
-
         self.session = None
 
     def _initialize_session(self):
         if not self.session:
             try:
-                # Środowisko jest już ustawione, więc ta metoda nie potrzebuje dodatkowych argumentów
                 self.session = self.service.auth_by_token(
                     nip=self.company_info.tax_id,
                     token=self.company_info.ksef_token,
