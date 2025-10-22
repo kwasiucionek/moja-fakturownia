@@ -371,3 +371,21 @@ class KsefClient:
                     error_details = e.response.text
             logger.error(f"❌ Błąd wysyłki faktury: {error_details}")
             raise Exception(f"Błąd wysyłki faktury do KSeF: {error_details}")
+
+        # Przechowuj NIP bez myślników
+        self.nip = self._normalize_nip(self.company_info.tax_id)
+
+    def _normalize_nip(self, nip: str) -> str:
+        """
+        Usuwa myślniki i spacje z NIP-u, zwraca tylko cyfry
+        """
+        if not nip:
+            raise Exception("Brak numeru NIP")
+
+        normalized = nip.replace("-", "").replace(" ", "").strip()
+
+        # Walidacja: musi mieć dokładnie 10 cyfr
+        if not normalized.isdigit() or len(normalized) != 10:
+            raise Exception(f"Nieprawidłowy format NIP: {nip}. Wymagane 10 cyfr.")
+
+        return normalized
