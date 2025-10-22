@@ -5,7 +5,7 @@ from django.conf import settings
 
 # === OSTATECZNA POPRAWKA IMPORTU ===
 from ksef_utils.server import KSEFService
-from ksef_utils.config import test_config, prod_config
+from ksef_utils.config import TestConfig, ProdConfig  # Importujemy klasy konfiguracyjne
 from ksiegowosc.models import CompanyInfo
 
 
@@ -21,7 +21,8 @@ class KsefClient:
 
         # === OSTATECZNY POPRAWIONY BLOK KODU ===
         env_str = self.company_info.ksef_environment
-        config_obj = test_config if env_str == "test" else prod_config
+        # Inicjujemy odpowiednią klasę konfiguracyjną
+        config_obj = TestConfig() if env_str == "test" else ProdConfig()
 
         self.service = KSEFService(config_obj)
 
