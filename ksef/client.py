@@ -265,7 +265,9 @@ class KsefClient:
             challenge_url = f"{self.base_url}/auth/challenge"
             headers = {"Content-Type": "application/json"}
 
-            context = {"contextIdentifier": {"type": "NIP", "identifier": self.nip}}
+            context = {
+                "contextIdentifier": {"type": "NIP", "value": self.nip}
+            }  # ✓ ZMIENIONE
 
             response = requests.post(
                 challenge_url, json=context, headers=headers, timeout=10
@@ -292,12 +294,10 @@ class KsefClient:
             auth_url = f"{self.base_url}/auth/ksef-token"
             payload = {
                 "challenge": challenge,
-                "contextIdentifier": {
-                    "type": "NIP",
-                    "identifier": self.nip,
-                },  # POPRAWIONE
+                "contextIdentifier": {"type": "NIP", "value": self.nip},  # ✓ POZOSTAW
                 "encryptedToken": encrypted_token,
             }
+            auth_url = f"{self.base_url}/auth/ksef-token"
 
             auth_response = requests.post(
                 auth_url, json=payload, headers=headers, timeout=10
