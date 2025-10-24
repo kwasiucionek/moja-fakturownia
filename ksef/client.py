@@ -1,4 +1,5 @@
 # ksef/client.py
+# KSeF API 2.0 - aktualny stan na październik 2025
 
 import requests
 import logging
@@ -20,12 +21,14 @@ logger = logging.getLogger(__name__)
 
 class KsefClient:
     """
-    Klient KSeF API 2.0 z obsługą certyfikatów i tokenów
+    Klient KSeF API 2.0 (wrzesień 2025)
     
-    Uwierzytelnianie:
-    - Tokeny KSeF (działają do 31.12.2026)
-    - Certyfikaty KSeF (dostępne od 01.11.2025 przez MCU)
-    - Środowisko testowe: samodzielnie wygenerowane certyfikaty
+    Uwierzytelnianie tokenem KSeF:
+    - Tokeny działają do 31.12.2026
+    - Od 1.11.2025 dostępne certyfikaty KSeF (MCU)
+    - Od 1.01.2027 tylko certyfikaty
+    
+    Środowisko testowe uruchomione: 30.09.2025
     """
     
     def __init__(self, user):
@@ -38,38 +41,39 @@ class KsefClient:
 
         if not self.company_info.ksef_token:
             raise Exception(
-                "Brak tokena KSeF w ustawieniach firmy. "
-                "Od 01.11.2025 można używać certyfikatów KSeF przez MCU."
+                "Brak tokena KSeF. Wygeneruj token w Aplikacji Podatnika KSeF.\n"
+                "Od 1 listopada 2025 będziesz mógł użyć certyfikatu KSeF przez MCU."
             )
 
-        # Ustaw URL dla API 2.0
+        # URL dla KSeF 2.0 (od 30.09.2025)
         env = self.company_info.ksef_environment
         if env == "test":
             self.base_url = "https://ksef-test.mf.gov.pl/api/v2"
         else:
             self.base_url = "https://ksef.mf.gov.pl/api/v2"
 
-        # Ścieżka do katalogu z kluczami publicznymi
+        # Ścieżka do kluczy publicznych
         self.key_dir = Path("/home/fakturownia/app/ksef-pubkey")
 
-        # Znormalizuj NIP (usuń myślniki i spacje)
+        # Znormalizuj NIP
         self.nip = self._normalize_nip(self.company_info.tax_id)
 
-        # Inicjalizuj zmienne
+        # Tokeny uwierzytelniania
         self.access_token = None
         self.refresh_token = None
         self.public_key_cert = None
+        
+        # Klucze szyfrowania
         self.aes_key = None
         self.aes_iv = None
 
     def _normalize_nip(self, nip: str) -> str:
-        """Usuwa myślniki i spacje z NIP-u, zwraca tylko cyfry"""
+        """Normalizuje NIP do formatu 10 cyfr"""
         if not nip:
             raise Exception("Brak numeru NIP")
 
         normalized = nip.replace("-", "").replace(" ", "").strip()
 
-        # Walidacja: musi mieć dokładnie 10 cyfr
         if not normalized.isdigit() or len(normalized) != 10:
             raise Exception(f"Nieprawidłowy format NIP: {nip}. Wymagane 10 cyfr.")
 
@@ -78,51 +82,49 @@ class KsefClient:
 
     def _get_public_key(self):
         """
-        Wczytuje klucz publiczny KSeF do szyfrowania
+        Pobiera klucz publiczny KSeF do szyfrowania
         
         Środowisko testowe:
-        - Klucz z https://ksef-test.mf.gov.pl/web/formularze/ksef-test-encryption-public-key.pem
+        - Lokalny plik: publicKey.pem
         - Lub endpoint: /api/v2/common/Encryption/PublicKey
         
-        Produkcja:
-        - Tylko endpoint API
+        Klucz testowy: https://ksef-test.mf.gov.pl/web/formularze/ksef-test-encryption-public-key.pem
         """
         if self.public_key_cert:
             return self.public_key_cert
 
         try:
-            logger.info("Wczytywanie klucza publicznego KSeF...")
+            logger.info("Pobieranie klucza publicznego KSeF...")
 
-            # Dla środowiska testowego - spróbuj lokalny plik
-            if self.company_info.ksef_environment == "test":
-                pem_file = self.key_dir / "publicKey.pem"
-                
-                if pem_file.exists():
-                    with open(pem_file, "rb") as f:
-                        key_data = f.read()
-                    
-                    logger.info(f"Wczytywanie lokalnego klucza: {pem_file} ({len(key_data)} bajtów)")
-                    
-                    # Próbuj jako certyfikat X.509
-                    try:
-                        cert = load_pem_x509_certificate(key_data, default_backend())
-                        self.public_key_cert = cert.public_key()
-                        logger.info(
-                            f"✓ Klucz testowy (certyfikat X.509, {self.public_key_cert.key_size} bitów)"
-                        )
-                        return self.public_key_cert
-                    except Exception:
-                        # Próbuj jako surowy klucz publiczny
-                        from cryptography.hazmat.primitives.serialization import load_pem_public_key
-                        
-                        self.public_key_cert = load_pem_public_key(key_data, default_backend())
-                        logger.info(
-                            f"✓ Klucz testowy (raw PEM, {self.public_key_cert.key_size} bitów)"
-                        )
-                        return self.public_key_cert
+            # 1. Spróbuj lokalny plik (szybsze dla środowiska testowego)
+            pem_file = self.key_dir / "publicKey.pem"
             
-            # Pobierz z API (produkcja lub brak lokalnego pliku)
-            logger.info("Pobieranie klucza publicznego z API KSeF...")
+            if pem_file.exists():
+                with open(pem_file, "rb") as f:
+                    key_data = f.read()
+                
+                logger.info(f"Wczytywanie lokalnego klucza: {pem_file}")
+                
+                # Próbuj jako certyfikat X.509
+                try:
+                    cert = load_pem_x509_certificate(key_data, default_backend())
+                    self.public_key_cert = cert.public_key()
+                    logger.info(
+                        f"✓ Klucz lokalny (certyfikat X.509, {self.public_key_cert.key_size} bitów)"
+                    )
+                    return self.public_key_cert
+                except Exception:
+                    # Próbuj jako surowy klucz publiczny
+                    from cryptography.hazmat.primitives.serialization import load_pem_public_key
+                    
+                    self.public_key_cert = load_pem_public_key(key_data, default_backend())
+                    logger.info(
+                        f"✓ Klucz lokalny (PEM, {self.public_key_cert.key_size} bitów)"
+                    )
+                    return self.public_key_cert
+            
+            # 2. Pobierz z API KSeF 2.0
+            logger.info("Pobieranie klucza z API KSeF 2.0...")
             key_url = f"{self.base_url}/common/Encryption/PublicKey"
             
             response = requests.get(key_url, timeout=10)
@@ -134,13 +136,13 @@ class KsefClient:
             if not key_pem:
                 raise Exception("API nie zwróciło klucza publicznego")
             
-            # Konwertuj z Base64 jeśli potrzeba
+            # Może być zakodowany Base64
             if not key_pem.startswith("-----BEGIN"):
                 key_pem = base64.b64decode(key_pem).decode('utf-8')
             
             key_bytes = key_pem.encode('utf-8')
             
-            # Próbuj wczytać jako certyfikat lub klucz
+            # Wczytaj klucz
             try:
                 cert = load_pem_x509_certificate(key_bytes, default_backend())
                 self.public_key_cert = cert.public_key()
@@ -152,7 +154,7 @@ class KsefClient:
                 
                 self.public_key_cert = load_pem_public_key(key_bytes, default_backend())
                 logger.info(
-                    f"✓ Klucz z API (raw PEM, {self.public_key_cert.key_size} bitów)"
+                    f"✓ Klucz z API (PEM, {self.public_key_cert.key_size} bitów)"
                 )
             
             return self.public_key_cert
@@ -168,7 +170,7 @@ class KsefClient:
             
             logger.error(f"❌ {error_msg}")
             
-            # Jeśli to test, pokaż pomocną wskazówkę
+            # Wskazówka dla środowiska testowego
             if self.company_info.ksef_environment == "test":
                 pem_file = self.key_dir / "publicKey.pem"
                 logger.error(
@@ -180,29 +182,31 @@ class KsefClient:
             raise Exception(error_msg)
         
         except Exception as e:
-            logger.error(f"❌ Błąd wczytywania klucza publicznego: {e}")
+            logger.error(f"❌ Błąd wczytywania klucza: {e}")
             raise
 
     def _encrypt_ksef_token(self, ksef_token: str, timestamp: int) -> str:
         """
-        Szyfruje token KSeF zgodnie z API 2.0
-        Format: "{token}|{timestamp}" -> RSA-OAEP SHA-256 -> Base64
+        Szyfruje token KSeF zgodnie z KSeF API 2.0
         
-        UWAGA: Tokeny KSeF działają do 31.12.2026
-        Od 01.11.2025 dostępne są certyfikaty KSeF przez MCU
+        Format: "{token}|{timestamp}"
+        Algorytm: RSA-OAEP SHA-256
+        Kodowanie: Base64
+        
+        Tokeny działają do 31.12.2026
         """
         try:
             public_key = self._get_public_key()
 
-            # Przygotuj string do zaszyfrowania
+            # String do zaszyfrowania
             token_string = f"{ksef_token}|{timestamp}"
             logger.info(
-                f"String do zaszyfrowania: {token_string[:30]}... (długość: {len(token_string)})"
+                f"Szyfrowanie tokena (długość: {len(token_string)} znaków)"
             )
 
             token_bytes = token_string.encode("utf-8")
 
-            # Szyfrowanie RSA-OAEP z SHA-256
+            # RSA-OAEP SHA-256
             encrypted = public_key.encrypt(
                 token_bytes,
                 padding.OAEP(
@@ -212,19 +216,16 @@ class KsefClient:
                 ),
             )
 
-            # Kodowanie do Base64
+            # Base64
             encrypted_b64 = base64.b64encode(encrypted).decode("utf-8")
             logger.info(
-                f"✓ Token zaszyfrowany (rozmiar: {len(encrypted)} bajtów, Base64: {len(encrypted_b64)} znaków)"
-            )
-            logger.debug(
-                f"Zaszyfrowany token (pierwsze 50 znaków): {encrypted_b64[:50]}..."
+                f"✓ Token zaszyfrowany ({len(encrypted)} bajtów → {len(encrypted_b64)} znaków Base64)"
             )
 
             return encrypted_b64
 
         except Exception as e:
-            logger.error(f"❌ Błąd szyfrowania tokena KSeF: {e}")
+            logger.error(f"❌ Błąd szyfrowania tokena: {e}")
             import traceback
             logger.error(traceback.format_exc())
             raise
@@ -232,13 +233,13 @@ class KsefClient:
     def _generate_aes_key(self):
         """Generuje klucz AES-256 i IV dla szyfrowania faktur"""
         self.aes_key = os.urandom(32)  # 256 bitów
-        self.aes_iv = os.urandom(16)  # 128 bitów
+        self.aes_iv = os.urandom(16)   # 128 bitów
         logger.info("✓ Wygenerowano klucz AES-256 i IV")
 
     def _encrypt_aes_key(self) -> dict:
         """
         Szyfruje klucz AES kluczem publicznym KSeF
-        Zwraca dict z zaszyfrowanym kluczem i IV w Base64
+        Zwraca zaszyfrowany klucz i IV w Base64
         """
         try:
             public_key = self._get_public_key()
@@ -254,13 +255,11 @@ class KsefClient:
             )
 
             result = {
-                "encryptedSymmetricKey": base64.b64encode(encrypted_key).decode(
-                    "utf-8"
-                ),
+                "encryptedSymmetricKey": base64.b64encode(encrypted_key).decode("utf-8"),
                 "initializationVector": base64.b64encode(self.aes_iv).decode("utf-8"),
             }
 
-            logger.info("✓ Klucz AES zaszyfrowany kluczem publicznym KSeF")
+            logger.info("✓ Klucz AES zaszyfrowany")
             return result
 
         except Exception as e:
@@ -269,13 +268,15 @@ class KsefClient:
 
     def _encrypt_invoice(self, invoice_xml: str) -> bytes:
         """
-        Szyfruje fakturę XML przy użyciu AES-256-CBC z paddingiem PKCS7
+        Szyfruje fakturę XML przy użyciu AES-256-CBC z PKCS7
+        
+        W KSeF 2.0 wszystkie faktury muszą być zaszyfrowane lokalnie
         """
         try:
-            # Konwersja XML do bajtów UTF-8
+            # XML do bajtów UTF-8
             invoice_bytes = invoice_xml.encode("utf-8")
 
-            # Tworzenie szyfru AES-256-CBC
+            # Szyfr AES-256-CBC
             cipher = Cipher(
                 algorithms.AES(self.aes_key),
                 modes.CBC(self.aes_iv),
@@ -284,7 +285,7 @@ class KsefClient:
 
             encryptor = cipher.encryptor()
 
-            # Dodanie paddingu PKCS7
+            # Padding PKCS7
             padding_length = 16 - (len(invoice_bytes) % 16)
             padded_data = invoice_bytes + bytes([padding_length] * padding_length)
 
@@ -292,7 +293,7 @@ class KsefClient:
             encrypted = encryptor.update(padded_data) + encryptor.finalize()
 
             logger.info(
-                f"✓ Faktura zaszyfrowana AES-256-CBC (rozmiar: {len(encrypted)} bajtów)"
+                f"✓ Faktura zaszyfrowana AES-256-CBC ({len(encrypted)} bajtów)"
             )
             return encrypted
 
@@ -302,81 +303,94 @@ class KsefClient:
 
     def _authenticate(self):
         """
-        Proces uwierzytelniania w KSeF API 2.0 z tokenem
+        Uwierzytelnianie w KSeF API 2.0 z tokenem
         
-        Kroki:
-        1. Pobierz challenge
-        2. Zaszyfruj token KSeF
-        3. Wyślij uwierzytelnienie
-        4. Pobierz status i tokeny dostępu
+        Proces (4 kroki):
+        1. POST /auth/challenge - pobierz challenge
+        2. Zaszyfruj token RSA-OAEP SHA-256
+        3. POST /auth/ksef-token - wyślij uwierzytelnienie
+        4. GET /auth/status/{ref} - pobierz access token (JWT)
         """
         if self.access_token:
-            logger.info("Token dostępowy już istnieje, pomijam uwierzytelnianie")
+            logger.info("Token dostępowy już istnieje")
             return
 
         try:
             logger.info("=" * 70)
-            logger.info("ROZPOCZĘCIE PROCESU UWIERZYTELNIANIA KSEF API 2.0")
+            logger.info("UWIERZYTELNIANIE W KSEF API 2.0")
             logger.info(f"Środowisko: {self.company_info.ksef_environment}")
             logger.info(f"NIP: {self.nip}")
             logger.info("=" * 70)
 
-            # Krok 1: Pobierz challenge
+            # KROK 1: Pobierz challenge
             logger.info("Krok 1/4: Pobieranie challenge...")
             challenge_url = f"{self.base_url}/auth/challenge"
             headers = {"Content-Type": "application/json"}
 
-            context = {"contextIdentifier": {"type": "NIP", "value": self.nip}}
+            # WAŻNE: W API 2.0 używamy "value" nie "identifier"
+            context = {
+                "contextIdentifier": {
+                    "type": "NIP",
+                    "value": self.nip  # <-- POPRAWNE dla API 2.0
+                }
+            }
 
-            logger.info(f"URL: {challenge_url}")
-            logger.info(f"Context: {context}")
+            logger.debug(f"URL: {challenge_url}")
+            logger.debug(f"Payload: {context}")
 
             response = requests.post(
                 challenge_url, json=context, headers=headers, timeout=10
             )
             response.raise_for_status()
             challenge_data = response.json()
+            
             challenge = challenge_data["challenge"]
             timestamp = challenge_data["timestamp"]
 
             logger.info(f"✓ Challenge otrzymany (timestamp: {timestamp})")
 
-            # Krok 2: Zaszyfruj token KSeF
+            # KROK 2: Zaszyfruj token KSeF
             logger.info("Krok 2/4: Szyfrowanie tokena KSeF...")
             encrypted_token = self._encrypt_ksef_token(
                 self.company_info.ksef_token, timestamp
             )
 
-            # Krok 3: Wyślij uwierzytelnienie
+            # KROK 3: Wyślij uwierzytelnienie
             logger.info("Krok 3/4: Wysyłanie uwierzytelnienia...")
             auth_url = f"{self.base_url}/auth/ksef-token"
 
+            # WAŻNE: Wszystkie pola są wymagane
             payload = {
                 "challenge": challenge,
-                "contextIdentifier": {"type": "NIP", "value": self.nip},
+                "contextIdentifier": {
+                    "type": "NIP",
+                    "value": self.nip  # <-- POPRAWNE dla API 2.0
+                },
                 "encryptedToken": encrypted_token,
             }
 
-            logger.info(f"URL: {auth_url}")
+            logger.debug(f"URL: {auth_url}")
 
             auth_response = requests.post(
                 auth_url, json=payload, headers=headers, timeout=10
             )
             
-            # Szczegółowe logowanie odpowiedzi
-            logger.info(f"Status odpowiedzi: {auth_response.status_code}")
+            # Szczegółowe logowanie
+            logger.info(f"Status HTTP: {auth_response.status_code}")
             
             if auth_response.status_code != 201:
                 error_detail = "Nieznany błąd"
                 try:
                     error_json = auth_response.json()
                     error_detail = error_json
-                    logger.error(f"Błąd API (JSON): {error_json}")
+                    logger.error(f"Błąd API: {error_json}")
                 except:
-                    error_detail = auth_response.text[:500]
+                    error_detail = auth_response.text
                     logger.error(f"Błąd API (text): {auth_response.text}")
                 
-                raise Exception(f"Błąd uwierzytelniania (status {auth_response.status_code}): {error_detail}")
+                raise Exception(
+                    f"Błąd uwierzytelniania (HTTP {auth_response.status_code}): {error_detail}"
+                )
             
             auth_response.raise_for_status()
             auth_data = auth_response.json()
@@ -384,8 +398,8 @@ class KsefClient:
 
             logger.info(f"✓ Uwierzytelnienie wysłane: {auth_ref}")
 
-            # Krok 4: Pobierz status uwierzytelnienia
-            logger.info("Krok 4/4: Pobieranie statusu uwierzytelnienia...")
+            # KROK 4: Pobierz status i tokeny
+            logger.info("Krok 4/4: Pobieranie statusu...")
             time.sleep(2)
 
             status_url = f"{self.base_url}/auth/status/{auth_ref}"
@@ -399,17 +413,20 @@ class KsefClient:
                 status_code = status_data.get("status", {}).get("code")
 
                 if status_code == 200:
+                    # Sukces!
                     self.access_token = status_data["authToken"]["accessToken"]
                     self.refresh_token = status_data["authToken"]["refreshToken"]
 
                     logger.info("✓ Uwierzytelnienie zakończone sukcesem")
                     logger.info(
-                        f"  Access token: {self.access_token[:30]}... (długość: {len(self.access_token)})"
+                        f"  Access token (JWT): {self.access_token[:30]}... "
+                        f"(długość: {len(self.access_token)})"
                     )
                     logger.info("=" * 70)
                     break
 
                 elif status_code and status_code >= 400:
+                    # Błąd
                     error_desc = status_data.get("status", {}).get(
                         "description", "Nieznany błąd"
                     )
@@ -418,14 +435,16 @@ class KsefClient:
                     raise Exception(f"Błąd uwierzytelniania: {error_desc}")
 
                 else:
+                    # Oczekiwanie
                     logger.info(
-                        f"  Status: {status_code} - oczekiwanie... ({attempt + 1}/{max_attempts})"
+                        f"  Status: {status_code} - oczekiwanie... "
+                        f"({attempt + 1}/{max_attempts})"
                     )
                     time.sleep(2)
 
             if not self.access_token:
                 raise Exception(
-                    "Nie udało się uzyskać tokena dostępowego po maksymalnej liczbie prób"
+                    "Nie udało się uzyskać tokena dostępowego"
                 )
 
         except requests.exceptions.RequestException as e:
@@ -436,37 +455,36 @@ class KsefClient:
                     error_details = error_json
                     logger.error(f"❌ Błąd HTTP - JSON: {error_json}")
                 except ValueError:
-                    error_details = e.response.text[:500]
-                    logger.error(f"❌ Błąd HTTP - text: {e.response.text}")
+                    error_details = e.response.text
+                    logger.error(f"❌ Błąd HTTP - text: {e.response.text[:500]}")
 
-                logger.error(f"Status code: {e.response.status_code}")
-                logger.error(f"Headers: {dict(e.response.headers)}")
+                logger.error(f"Status HTTP: {e.response.status_code}")
 
             logger.error(f"❌ Błąd uwierzytelniania: {error_details}")
-            raise Exception(f"Błąd uwierzytelniania KSeF API v2.0: {error_details}")
+            raise Exception(f"Błąd uwierzytelniania KSeF API 2.0: {error_details}")
 
     def send_invoice(self, invoice_xml: str):
         """
-        Wysyła fakturę do KSeF w trybie interaktywnym (online)
+        Wysyła fakturę do KSeF 2.0 w trybie online
         
         Proces:
-        1. Otwórz sesję online z szyfrowaniem AES
-        2. Wyślij zaszyfrowaną fakturę
-        3. Sprawdź status przetwarzania
-        4. Zamknij sesję
+        1. Otwórz sesję online (POST /sessions/online)
+        2. Wyślij zaszyfrowaną fakturę (PUT /sessions/online/{ref}/invoices)
+        3. Sprawdź status (GET /sessions/{ref}/invoices/{ref})
+        4. Zamknij sesję (POST /sessions/online/{ref}/close)
         """
         try:
             # Uwierzytelnienie
             self._authenticate()
 
-            # Generuj klucz AES do szyfrowania faktury
+            # Generuj klucz AES
             self._generate_aes_key()
 
             logger.info("=" * 70)
-            logger.info("WYSYŁANIE FAKTURY DO KSEF")
+            logger.info("WYSYŁANIE FAKTURY DO KSEF 2.0")
             logger.info("=" * 70)
 
-            # Krok 1: Otwórz sesję online
+            # KROK 1: Otwórz sesję
             logger.info("Krok 1/4: Otwieranie sesji online...")
             session_url = f"{self.base_url}/sessions/online"
             headers = {
@@ -475,7 +493,10 @@ class KsefClient:
             }
 
             encryption_data = self._encrypt_aes_key()
-            session_payload = {"formCode": "FA(3)", "encryption": encryption_data}
+            session_payload = {
+                "formCode": "FA(3)",  # Schemat FA(3) dla KSeF 2.0
+                "encryption": encryption_data
+            }
 
             session_response = requests.post(
                 session_url, json=session_payload, headers=headers, timeout=10
@@ -483,9 +504,10 @@ class KsefClient:
             session_response.raise_for_status()
             session_data = session_response.json()
             session_ref = session_data["referenceNumber"]
+            
             logger.info(f"✓ Sesja otwarta: {session_ref}")
 
-            # Krok 2: Zaszyfruj i wyślij fakturę
+            # KROK 2: Wyślij fakturę
             logger.info("Krok 2/4: Szyfrowanie i wysyłanie faktury...")
             encrypted_invoice = self._encrypt_invoice(invoice_xml)
 
@@ -504,13 +526,11 @@ class KsefClient:
             invoice_ref = invoice_data["referenceNumber"]
             logger.info(f"✓ Faktura wysłana: {invoice_ref}")
 
-            # Krok 3: Sprawdź status faktury
+            # KROK 3: Sprawdź status
             logger.info("Krok 3/4: Sprawdzanie statusu faktury...")
             time.sleep(3)
 
-            status_url = (
-                f"{self.base_url}/sessions/{session_ref}/invoices/{invoice_ref}"
-            )
+            status_url = f"{self.base_url}/sessions/{session_ref}/invoices/{invoice_ref}"
             status_headers = {"Authorization": f"Bearer {self.access_token}"}
 
             max_attempts = 10
@@ -532,16 +552,17 @@ class KsefClient:
                     error_desc = status_data.get("status", {}).get(
                         "description", "Nieznany błąd"
                     )
-                    logger.error(f"❌ Błąd przetwarzania faktury: {error_desc}")
+                    logger.error(f"❌ Błąd przetwarzania: {error_desc}")
                     logger.error(f"Pełna odpowiedź: {status_data}")
                     break
                 else:
                     logger.info(
-                        f"  Status faktury: {invoice_status} - oczekiwanie... ({attempt + 1}/{max_attempts})"
+                        f"  Status: {invoice_status} - oczekiwanie... "
+                        f"({attempt + 1}/{max_attempts})"
                     )
                     time.sleep(2)
 
-            # Krok 4: Zamknij sesję
+            # KROK 4: Zamknij sesję
             logger.info("Krok 4/4: Zamykanie sesji...")
             close_url = f"{self.base_url}/sessions/online/{session_ref}/close"
             close_headers = {
@@ -569,12 +590,12 @@ class KsefClient:
                 try:
                     error_json = e.response.json()
                     error_details = error_json
-                    logger.error(f"❌ Błąd wysyłki - JSON: {error_json}")
+                    logger.error(f"❌ Błąd - JSON: {error_json}")
                 except ValueError:
-                    error_details = e.response.text[:500]
-                    logger.error(f"❌ Błąd wysyłki - text: {e.response.text}")
+                    error_details = e.response.text
+                    logger.error(f"❌ Błąd - text: {e.response.text[:500]}")
                 
-                logger.error(f"Status code: {e.response.status_code}")
+                logger.error(f"Status HTTP: {e.response.status_code}")
             
             logger.error(f"❌ Błąd wysyłki faktury: {error_details}")
-            raise Exception(f"Błąd wysyłki faktury do KSeF: {error_details}")
+            raise Exception(f"Błąd wysyłki faktury do KSeF 2.0: {error_details}")
