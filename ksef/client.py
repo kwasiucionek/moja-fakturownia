@@ -292,7 +292,10 @@ class KsefClient:
             auth_url = f"{self.base_url}/auth/ksef-token"
             payload = {
                 "challenge": challenge,
-                "contextIdentifier": {"type": "NIP", "value": self.nip},
+                "contextIdentifier": {
+                    "type": "NIP",
+                    "identifier": self.nip,
+                },  # POPRAWIONE
                 "encryptedToken": encrypted_token,
             }
 
