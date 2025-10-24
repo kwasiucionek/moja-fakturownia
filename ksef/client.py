@@ -249,7 +249,8 @@ class KsefClient:
 
     def _authenticate(self):
         """
-        Proces uwierzytelniania w API 2.0 zgodny z dokumentacją OpenAPI
+        Proces uwierzytelniania w API 2.0 zgodny z dokumentacją GitHub
+        https://github.com/CIRFMF/ksef-docs/tree/main/auth
         """
         if self.access_token:
             logger.info("Token dostępowy już istnieje, pomijam uwierzytelnianie")
@@ -258,161 +259,221 @@ class KsefClient:
         try:
             logger.info("=" * 70)
             logger.info("ROZPOCZĘCIE PROCESU UWIERZYTELNIANIA KSEF API 2.0")
+            logger.info(f"Środowisko: {self.company_info.ksef_environment}")
+            logger.info(f"Base URL: {self.base_url}")
+            logger.info(f"NIP: {self.nip}")
             logger.info("=" * 70)
 
-            # Krok 1: Pobierz challenge
-            logger.info("Krok 1/4: Pobieranie challenge...")
+            # KROK 1: Pobierz Challenge
+            logger.info("Krok 1/5: Pobieranie challenge...")
             challenge_url = f"{self.base_url}/auth/challenge"
             headers = {"Content-Type": "application/json"}
 
-            # Zgodnie z OpenAPI: contextIdentifier z "type" i "identifier"
-            context = {
-                "contextIdentifier": {
-                    "type": "onip",  # Typ dla NIP
-                    "identifier": self.nip,
-                }
+            challenge_request = {
+                "contextIdentifier": {"type": "onip", "identifier": self.nip}
             }
 
+            logger.info(f"POST {challenge_url}")
+            logger.debug(f"Request: {challenge_request}")
+
             response = requests.post(
-                challenge_url, json=context, headers=headers, timeout=10
+                challenge_url, json=challenge_request, headers=headers, timeout=10
             )
+
+            logger.info(f"Response status: {response.status_code}")
+
+            if response.status_code != 200:
+                logger.error(f"Response: {response.text}")
+
             response.raise_for_status()
             challenge_data = response.json()
+
+            logger.debug(f"Challenge response: {challenge_data}")
 
             challenge = challenge_data["challenge"]
             timestamp_str = challenge_data["timestamp"]
 
-            # Konwertuj timestamp ISO na milisekundy Unix epoch
+            # Konwertuj timestamp na milisekundy
             dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             timestamp_ms = int(dt.timestamp() * 1000)
 
-            logger.info(f"✓ Challenge otrzymany: {challenge[:30]}...")
-            logger.info(f"✓ Timestamp z API: {timestamp_str}")
-            logger.info(f"✓ Timestamp w ms: {timestamp_ms}")
+            logger.info(f"✓ Challenge: {challenge[:30]}...")
+            logger.info(f"✓ Timestamp: {timestamp_str} -> {timestamp_ms} ms")
 
-            # Krok 2: Zaszyfruj token i wyślij żądanie uwierzytelnienia
-            logger.info("Krok 2/4: Szyfrowanie i wysyłanie tokena KSeF...")
+            # KROK 2: Zaszyfruj token
+            logger.info("Krok 2/5: Szyfrowanie tokena...")
+
             encrypted_token = self._encrypt_ksef_token(
                 self.company_info.ksef_token, timestamp_ms
             )
 
-            auth_url = f"{self.base_url}/auth/authorisation-token"
+            logger.info(f"✓ Token zaszyfrowany ({len(encrypted_token)} znaków)")
 
-            # Zgodnie z OpenAPI dla authorisation-token
-            payload = {
+            # KROK 3: InitToken - wyślij zaszyfrowany token
+            logger.info("Krok 3/5: Wysyłanie zaszyfrowanego tokena (InitToken)...")
+
+            init_url = f"{self.base_url}/auth/authorisation-token"
+
+            init_request = {
                 "contextIdentifier": {"type": "onip", "identifier": self.nip},
                 "token": encrypted_token,
             }
 
-            logger.info(f"Wysyłanie do: {auth_url}")
-            logger.info(
-                f"Payload (bez tokena): {{'contextIdentifier': {payload['contextIdentifier']}, 'token': '***'}}"
+            logger.info(f"POST {init_url}")
+
+            init_response = requests.post(
+                init_url, json=init_request, headers=headers, timeout=10
             )
 
-            auth_response = requests.post(
-                auth_url, json=payload, headers=headers, timeout=10
-            )
+            logger.info(f"Response status: {init_response.status_code}")
 
-            # Loguj szczegóły odpowiedzi
-            logger.info(f"Status odpowiedzi: {auth_response.status_code}")
-
-            if auth_response.status_code != 200:
-                error_body = auth_response.text
-                logger.error(f"❌ Błąd autoryzacji: {error_body}")
+            if init_response.status_code != 200:
+                logger.error(f"Response: {init_response.text}")
                 try:
-                    error_json = auth_response.json()
-                    logger.error(f"❌ Szczegóły błędu: {error_json}")
+                    error_json = init_response.json()
+                    logger.error(
+                        f"Error JSON: {json.dumps(error_json, indent=2, ensure_ascii=False)}"
+                    )
                 except:
                     pass
 
-            auth_response.raise_for_status()
-            auth_data = auth_response.json()
+            init_response.raise_for_status()
+            init_data = init_response.json()
 
-            # W odpowiedzi mamy AuthorisationChallengeResponse
-            reference_number = auth_data.get("referenceNumber")
-            temp_token = auth_data.get("authenticationToken", {}).get("token")
+            logger.debug(f"Init response: {init_data}")
 
-            if not reference_number or not temp_token:
-                logger.error(f"Niepełna odpowiedź: {auth_data}")
+            reference_number = init_data.get("referenceNumber")
+            session_token = init_data.get("sessionToken", {}).get("token")
+
+            if not reference_number or not session_token:
+                logger.error(f"Niepełna odpowiedź InitToken: {init_data}")
                 raise Exception(
-                    "Brak referenceNumber lub authenticationToken w odpowiedzi"
+                    "Brak referenceNumber lub sessionToken w odpowiedzi InitToken"
                 )
 
-            logger.info(f"✓ Otrzymano tymczasowy token")
             logger.info(f"✓ Reference number: {reference_number}")
+            logger.info(f"✓ Session token otrzymany: {session_token[:30]}...")
 
-            # Krok 3: Sprawdź status uwierzytelniania
-            logger.info("Krok 3/4: Sprawdzanie statusu uwierzytelniania...")
-            status_url = f"{self.base_url}/auth/{reference_number}"
-            status_headers = {
-                "SessionToken": temp_token  # Zgodnie z OpenAPI używamy SessionToken w header
-            }
+            # KROK 4: Sprawdź status autoryzacji
+            logger.info("Krok 4/5: Sprawdzanie statusu autoryzacji...")
 
-            max_attempts = 15
+            status_url = f"{self.base_url}/auth/authorisation/{reference_number}/Status"
+            status_headers = {"SessionToken": session_token}
+
+            max_attempts = 20
+
             for attempt in range(max_attempts):
-                time.sleep(2)  # Poczekaj przed sprawdzeniem
+                time.sleep(2)
+
+                logger.info(f"Próba {attempt + 1}/{max_attempts}: GET {status_url}")
 
                 status_response = requests.get(
                     status_url, headers=status_headers, timeout=10
                 )
+
+                logger.info(f"Status code: {status_response.status_code}")
+
+                if status_response.status_code != 200:
+                    logger.error(f"Response: {status_response.text}")
+
                 status_response.raise_for_status()
                 status_data = status_response.json()
 
-                status_code = status_data.get("processingCode")
-                status_desc = status_data.get("processingDescription", "")
+                logger.debug(f"Status: {status_data}")
+
+                processing_code = status_data.get("processingCode")
+                processing_desc = status_data.get("processingDescription", "")
 
                 logger.info(
-                    f"  Próba {attempt + 1}/{max_attempts}: kod={status_code}, opis={status_desc}"
+                    f"  Processing: code={processing_code}, desc={processing_desc}"
                 )
 
-                if status_code == 200:
-                    logger.info(f"✓ Uwierzytelnianie zakończone sukcesem")
+                if processing_code == 200:
+                    logger.info(f"✓ Autoryzacja potwierdzona")
                     break
-                elif status_code and status_code >= 400:
-                    logger.error(
-                        f"❌ Błąd uwierzytelniania (kod {status_code}): {status_desc}"
+                elif processing_code and processing_code >= 400:
+                    error_msg = (
+                        f"Błąd autoryzacji (kod {processing_code}): {processing_desc}"
                     )
-                    raise Exception(f"Błąd uwierzytelniania: {status_desc}")
+                    logger.error(f"❌ {error_msg}")
+                    raise Exception(error_msg)
                 else:
-                    # Wciąż w trakcie przetwarzania
+                    logger.info(f"  Czekam na potwierdzenie...")
                     continue
             else:
-                raise Exception(
-                    "Przekroczono limit prób sprawdzenia statusu uwierzytelniania"
-                )
+                raise Exception("Przekroczono limit prób sprawdzenia statusu")
 
-            # Krok 4: Odbierz tokeny dostępowe (access i refresh)
-            logger.info("Krok 4/4: Odbieranie tokenów dostępowych...")
+            # KROK 5: GenerateToken - wygeneruj finalne tokeny JWT
+            logger.info(
+                "Krok 5/5: Generowanie finalnych tokenów JWT (GenerateToken)..."
+            )
 
-            # Token w odpowiedzi status może już zawierać finalne tokeny
-            if "sessionToken" in status_data:
-                session_token_data = status_data["sessionToken"]
-                self.access_token = session_token_data.get("token")
+            generate_url = (
+                f"{self.base_url}/auth/authorisation/{reference_number}/GenerateToken"
+            )
+            generate_headers = {"SessionToken": session_token}
 
-                # Refresh token może być opcjonalny
-                self.refresh_token = status_data.get("refreshToken", {}).get("token")
+            logger.info(f"POST {generate_url}")
 
-                logger.info("✓ Pomyślnie uzyskano tokeny dostępowe")
-                logger.info(
-                    f"✓ Access token (pierwsze 30 znaków): {self.access_token[:30]}..."
-                )
-            else:
-                logger.error("Brak sessionToken w odpowiedzi statusowej")
-                raise Exception("Nie otrzymano sessionToken")
+            generate_response = requests.post(
+                generate_url, headers=generate_headers, timeout=10
+            )
+
+            logger.info(f"Response status: {generate_response.status_code}")
+
+            if generate_response.status_code != 200:
+                logger.error(f"Response: {generate_response.text}")
+
+            generate_response.raise_for_status()
+            token_data = generate_response.json()
+
+            logger.debug(f"Token response: {token_data}")
+
+            # Pobierz tokeny JWT
+            self.access_token = token_data.get("sessionToken", {}).get("token")
+            self.refresh_token = token_data.get("refreshToken", {}).get("token")
+
+            if not self.access_token:
+                logger.error(f"Brak sessionToken w odpowiedzi: {token_data}")
+                raise Exception("Nie otrzymano sessionToken (JWT)")
+
+            logger.info(f"✓ Access token (JWT) otrzymany: {self.access_token[:30]}...")
+            if self.refresh_token:
+                logger.info(f"✓ Refresh token otrzymany: {self.refresh_token[:30]}...")
 
             logger.info("=" * 70)
-            logger.info("UWIERZYTELNIANIE ZAKOŃCZONE POMYŚLNIE")
+            logger.info("✅ UWIERZYTELNIANIE ZAKOŃCZONE POMYŚLNIE")
             logger.info("=" * 70)
 
         except requests.exceptions.RequestException as e:
             error_details = str(e)
             if hasattr(e, "response") and e.response is not None:
                 try:
-                    error_details = e.response.json()
+                    error_json = e.response.json()
+                    error_details = json.dumps(error_json, indent=2, ensure_ascii=False)
+                    logger.error(f"❌ JSON error:\n{error_details}")
                 except ValueError:
                     error_details = e.response.text
-            logger.error(f"❌ Błąd uwierzytelniania: {error_details}")
+                    logger.error(f"❌ Text error:\n{error_details}")
+
+                logger.error(f"Status: {e.response.status_code}")
+
+            logger.error(f"❌ Błąd uwierzytelniania KSeF API v2.0: {error_details}")
+
+            import traceback
+
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
+
             raise Exception(f"Błąd uwierzytelniania KSeF API v2.0: {error_details}")
+
+        except Exception as e:
+            logger.error(f"❌ Nieoczekiwany błąd: {type(e).__name__}: {str(e)}")
+
+            import traceback
+
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
+
+            raise
 
     def send_invoice(self, invoice_xml: str) -> dict:
         """
@@ -541,97 +602,50 @@ class KsefClient:
             raise Exception(f"Błąd wysyłki faktury do KSeF: {error_details}")
 
     def _get_public_key(self):
-        """Pobiera aktualny klucz publiczny KSeF z API v2"""
+        """Wczytuje klucz publiczny KSeF (tylko lokalny plik)"""
         if self.public_key_cert:
             return self.public_key_cert
 
         try:
-            # Prawidłowy endpoint dla API v2
-            public_key_url = f"{self.base_url}/common/Encryption/PublicKey"
+            logger.info("Wczytywanie klucza publicznego KSeF...")
 
-            logger.info(f"Pobieranie klucza publicznego z API KSeF v2...")
-            logger.info(f"URL: {public_key_url}")
+            pem_file = self.key_dir / "publicKey.pem"
 
-            headers = {
-                "Accept": "application/octet-stream"
-            }  # Klucz zwracany jako binary
-            response = requests.get(public_key_url, headers=headers, timeout=10)
-            response.raise_for_status()
+            if not pem_file.exists():
+                raise Exception(
+                    f"Brak pliku klucza publicznego: {pem_file}\n"
+                    f"Pobierz klucz komendą:\n"
+                    f"curl -o {pem_file} https://ksef-test.mf.gov.pl/web/formularze/ksef-test-encryption-public-key.pem"
+                )
 
-            # API zwraca klucz jako binary (DER format)
-            public_key_bytes = response.content
+            with open(pem_file, "rb") as f:
+                key_data = f.read()
 
-            logger.info(f"✓ Otrzymano klucz publiczny ({len(public_key_bytes)} bajtów)")
+            logger.info(f"Plik klucza: {pem_file} ({len(key_data)} bajtów)")
 
-            # Próbuj załadować jako certyfikat X.509 DER
+            # Próbuj jako certyfikat X.509
             try:
-                cert = load_der_x509_certificate(public_key_bytes, default_backend())
+                cert = load_pem_x509_certificate(key_data, default_backend())
                 self.public_key_cert = cert.public_key()
                 logger.info(
-                    f"✓ Wczytano jako certyfikat X.509 DER ({self.public_key_cert.key_size} bitów)"
+                    f"✓ Klucz publiczny (certyfikat X.509, {self.public_key_cert.key_size} bitów)"
                 )
-            except Exception as e1:
-                # Jeśli nie jest certyfikatem, spróbuj jako surowy klucz DER
+            except Exception:
+                # Próbuj jako surowy klucz publiczny
+                from cryptography.hazmat.primitives.serialization import (
+                    load_pem_public_key,
+                )
+
+                self.public_key_cert = load_pem_public_key(key_data, default_backend())
                 logger.info(
-                    f"Nie jest certyfikatem X.509, próba jako surowy klucz publiczny..."
+                    f"✓ Klucz publiczny (raw PEM, {self.public_key_cert.key_size} bitów)"
                 )
-                try:
-                    from cryptography.hazmat.primitives.serialization import (
-                        load_der_public_key,
-                    )
-
-                    self.public_key_cert = load_der_public_key(
-                        public_key_bytes, default_backend()
-                    )
-                    logger.info(
-                        f"✓ Wczytano jako surowy klucz DER ({self.public_key_cert.key_size} bitów)"
-                    )
-                except Exception as e2:
-                    # Ostatnia próba - może jest w PEM?
-                    logger.info(f"Próba interpretacji jako PEM...")
-                    try:
-                        from cryptography.hazmat.primitives.serialization import (
-                            load_pem_public_key,
-                        )
-
-                        self.public_key_cert = load_pem_public_key(
-                            public_key_bytes, default_backend()
-                        )
-                        logger.info(
-                            f"✓ Wczytano jako klucz PEM ({self.public_key_cert.key_size} bitów)"
-                        )
-                    except Exception as e3:
-                        logger.error(f"Nie można załadować klucza w żadnym formacie")
-                        logger.error(f"DER X.509 error: {e1}")
-                        logger.error(f"DER raw error: {e2}")
-                        logger.error(f"PEM error: {e3}")
-                        raise Exception("Nie można zinterpretować klucza publicznego")
 
             return self.public_key_cert
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"❌ Błąd HTTP podczas pobierania klucza: {e}")
-            if hasattr(e, "response") and e.response is not None:
-                logger.error(f"Status code: {e.response.status_code}")
-                logger.error(f"Response: {e.response.text[:500]}")
-
-            # Fallback na lokalny klucz
-            logger.warning(
-                "⚠️  Próba użycia lokalnego klucza publicznego jako fallback..."
-            )
-            return self._load_local_public_key()
-
         except Exception as e:
-            logger.error(f"❌ Błąd przetwarzania klucza publicznego: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-
-            # Fallback na lokalny klucz
-            logger.warning(
-                "⚠️  Próba użycia lokalnego klucza publicznego jako fallback..."
-            )
-            return self._load_local_public_key()
+            logger.error(f"❌ Błąd wczytywania klucza publicznego: {e}")
+            raise
 
     def _load_local_public_key(self):
         """Ładuje lokalny klucz publiczny jako fallback"""
