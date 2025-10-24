@@ -502,3 +502,116 @@ class KsefClient:
                     error_details = e.response.text
             logger.error(f"❌ Błąd wysyłki faktury: {error_details}")
             raise Exception(f"Błąd wysyłki faktury do KSeF: {error_details}")
+
+    def _get_public_key(self):
+        """Pobiera aktualny klucz publiczny KSeF z API"""
+        if self.public_key_cert:
+            return self.public_key_cert
+
+        try:
+            # Pobierz klucz publiczny z API KSeF
+            public_key_url = f"{self.base_url}/common/PublicKey"
+
+            logger.info(f"Pobieranie klucza publicznego z: {public_key_url}")
+
+            response = requests.get(public_key_url, timeout=10)
+            response.raise_for_status()
+
+            # API zwraca JSON z kluczem w Base64
+            key_data = response.json()
+
+            # Klucz jest w formacie: {"publicKey": "BASE64_ENCODED_KEY"}
+            public_key_base64 = key_data.get("publicKey")
+
+            if not public_key_base64:
+                raise Exception("Brak klucza publicznego w odpowiedzi API")
+
+            # Dekoduj z Base64
+            public_key_bytes = base64.b64decode(public_key_base64)
+
+            # Załaduj klucz - spróbuj najpierw jako certyfikat X.509
+            try:
+                cert = load_der_x509_certificate(public_key_bytes, default_backend())
+                self.public_key_cert = cert.public_key()
+                logger.info(
+                    f"✓ Wczytano klucz publiczny z API (certyfikat X.509, {self.public_key_cert.key_size} bitów)"
+                )
+            except Exception:
+                # Jeśli to nie certyfikat, spróbuj jako sam klucz publiczny
+                from cryptography.hazmat.primitives.serialization import (
+                    load_der_public_key,
+                )
+
+                self.public_key_cert = load_der_public_key(
+                    public_key_bytes, default_backend()
+                )
+                logger.info(
+                    f"✓ Wczytano klucz publiczny z API (raw key, {self.public_key_cert.key_size} bitów)"
+                )
+
+            return self.public_key_cert
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Błąd pobierania klucza publicznego z API: {e}")
+
+            # FALLBACK: spróbuj użyć lokalnego klucza (tylko dla testów)
+            logger.warning("⚠️  Próba użycia lokalnego klucza publicznego...")
+
+            pem_file = self.key_dir / "publicKey.pem"
+            der_file = self.key_dir / "publicKey.der"
+
+            if pem_file.exists():
+                logger.info(f"Wczytywanie lokalnego klucza z: {pem_file}")
+                with open(pem_file, "rb") as f:
+                    key_data = f.read()
+
+                try:
+                    cert = load_pem_x509_certificate(key_data, default_backend())
+                    self.public_key_cert = cert.public_key()
+                    logger.warning(
+                        f"⚠️  Wczytano lokalny klucz PEM (rozmiar: {self.public_key_cert.key_size} bitów)"
+                    )
+                except Exception:
+                    from cryptography.hazmat.primitives.serialization import (
+                        load_pem_public_key,
+                    )
+
+                    self.public_key_cert = load_pem_public_key(
+                        key_data, default_backend()
+                    )
+                    logger.warning(
+                        f"⚠️  Wczytano lokalny czysty klucz PEM (rozmiar: {self.public_key_cert.key_size} bitów)"
+                    )
+
+            elif der_file.exists():
+                logger.info(f"Wczytywanie lokalnego klucza z: {der_file}")
+                with open(der_file, "rb") as f:
+                    key_data = f.read()
+
+                try:
+                    cert = load_der_x509_certificate(key_data, default_backend())
+                    self.public_key_cert = cert.public_key()
+                    logger.warning(
+                        f"⚠️  Wczytano lokalny klucz DER (rozmiar: {self.public_key_cert.key_size} bitów)"
+                    )
+                except Exception:
+                    from cryptography.hazmat.primitives.serialization import (
+                        load_der_public_key,
+                    )
+
+                    self.public_key_cert = load_der_public_key(
+                        key_data, default_backend()
+                    )
+                    logger.warning(
+                        f"⚠️  Wczytano lokalny czysty klucz DER (rozmiar: {self.public_key_cert.key_size} bitów)"
+                    )
+            else:
+                raise Exception(
+                    f"Nie można pobrać klucza publicznego z API ani znaleźć lokalnego pliku w {self.key_dir}"
+                )
+
+            return self.public_key_cert
+
+        except Exception as e:
+            logger.error(f"❌ Błąd wczytywania klucza publicznego: {e}")
+            raise
