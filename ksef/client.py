@@ -249,7 +249,7 @@ class KsefClient:
 
     def _authenticate(self):
         """
-        Nowy proces uwierzytelniania w API 2.0
+        Proces uwierzytelniania w API 2.0 zgodny z dokumentacją OpenAPI
         """
         if self.access_token:
             logger.info("Token dostępowy już istnieje, pomijam uwierzytelnianie")
@@ -265,9 +265,13 @@ class KsefClient:
             challenge_url = f"{self.base_url}/auth/challenge"
             headers = {"Content-Type": "application/json"}
 
+            # Zgodnie z OpenAPI: contextIdentifier z "type" i "identifier"
             context = {
-                "contextIdentifier": {"type": "NIP", "value": self.nip}
-            }  # ✓ ZMIENIONE
+                "contextIdentifier": {
+                    "type": "onip",  # Typ dla NIP
+                    "identifier": self.nip,
+                }
+            }
 
             response = requests.post(
                 challenge_url, json=context, headers=headers, timeout=10
@@ -278,12 +282,13 @@ class KsefClient:
             challenge = challenge_data["challenge"]
             timestamp_str = challenge_data["timestamp"]
 
-            # Konwertuj timestamp ISO na milisekundy
+            # Konwertuj timestamp ISO na milisekundy Unix epoch
             dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             timestamp_ms = int(dt.timestamp() * 1000)
 
-            logger.info(f"✓ Challenge: {challenge[:20]}...")
-            logger.info(f"✓ Timestamp: {timestamp_str} -> {timestamp_ms} ms")
+            logger.info(f"✓ Challenge otrzymany: {challenge[:30]}...")
+            logger.info(f"✓ Timestamp z API: {timestamp_str}")
+            logger.info(f"✓ Timestamp w ms: {timestamp_ms}")
 
             # Krok 2: Zaszyfruj token i wyślij żądanie uwierzytelnienia
             logger.info("Krok 2/4: Szyfrowanie i wysyłanie tokena KSeF...")
@@ -291,59 +296,86 @@ class KsefClient:
                 self.company_info.ksef_token, timestamp_ms
             )
 
-            auth_url = f"{self.base_url}/auth/ksef-token"
+            auth_url = f"{self.base_url}/auth/authorisation-token"
+
+            # Zgodnie z OpenAPI dla authorisation-token
             payload = {
-                "challenge": challenge,
-                "contextIdentifier": {"type": "NIP", "value": self.nip},  # ✓ POZOSTAW
-                "encryptedToken": encrypted_token,
+                "contextIdentifier": {"type": "onip", "identifier": self.nip},
+                "token": encrypted_token,
             }
-            auth_url = f"{self.base_url}/auth/ksef-token"
+
+            logger.info(f"Wysyłanie do: {auth_url}")
+            logger.info(
+                f"Payload (bez tokena): {{'contextIdentifier': {payload['contextIdentifier']}, 'token': '***'}}"
+            )
 
             auth_response = requests.post(
                 auth_url, json=payload, headers=headers, timeout=10
             )
+
+            # Loguj szczegóły odpowiedzi
+            logger.info(f"Status odpowiedzi: {auth_response.status_code}")
+
+            if auth_response.status_code != 200:
+                error_body = auth_response.text
+                logger.error(f"❌ Błąd autoryzacji: {error_body}")
+                try:
+                    error_json = auth_response.json()
+                    logger.error(f"❌ Szczegóły błędu: {error_json}")
+                except:
+                    pass
+
             auth_response.raise_for_status()
             auth_data = auth_response.json()
 
-            reference_number = auth_data["referenceNumber"]
-            temp_token = auth_data["authenticationToken"]["token"]
+            # W odpowiedzi mamy AuthorisationChallengeResponse
+            reference_number = auth_data.get("referenceNumber")
+            temp_token = auth_data.get("authenticationToken", {}).get("token")
+
+            if not reference_number or not temp_token:
+                logger.error(f"Niepełna odpowiedź: {auth_data}")
+                raise Exception(
+                    "Brak referenceNumber lub authenticationToken w odpowiedzi"
+                )
+
             logger.info(f"✓ Otrzymano tymczasowy token")
             logger.info(f"✓ Reference number: {reference_number}")
 
             # Krok 3: Sprawdź status uwierzytelniania
             logger.info("Krok 3/4: Sprawdzanie statusu uwierzytelniania...")
             status_url = f"{self.base_url}/auth/{reference_number}"
-            status_headers = {"Authorization": f"Bearer {temp_token}"}
+            status_headers = {
+                "SessionToken": temp_token  # Zgodnie z OpenAPI używamy SessionToken w header
+            }
 
             max_attempts = 15
             for attempt in range(max_attempts):
+                time.sleep(2)  # Poczekaj przed sprawdzeniem
+
                 status_response = requests.get(
                     status_url, headers=status_headers, timeout=10
                 )
                 status_response.raise_for_status()
                 status_data = status_response.json()
 
-                status_code = status_data["status"]["code"]
-                status_desc = status_data["status"].get("description", "")
+                status_code = status_data.get("processingCode")
+                status_desc = status_data.get("processingDescription", "")
+
+                logger.info(
+                    f"  Próba {attempt + 1}/{max_attempts}: kod={status_code}, opis={status_desc}"
+                )
 
                 if status_code == 200:
-                    logger.info(
-                        f"✓ Uwierzytelnianie zakończone sukcesem: {status_desc}"
-                    )
+                    logger.info(f"✓ Uwierzytelnianie zakończone sukcesem")
                     break
-                elif status_code >= 400:
-                    error_msg = status_data["status"].get(
-                        "description", "Nieznany błąd"
-                    )
+                elif status_code and status_code >= 400:
                     logger.error(
-                        f"❌ Błąd uwierzytelniania (kod {status_code}): {error_msg}"
+                        f"❌ Błąd uwierzytelniania (kod {status_code}): {status_desc}"
                     )
-                    raise Exception(f"Błąd uwierzytelniania: {error_msg}")
+                    raise Exception(f"Błąd uwierzytelniania: {status_desc}")
                 else:
-                    logger.info(
-                        f"  Status: {status_code} - {status_desc} - oczekiwanie... ({attempt + 1}/{max_attempts})"
-                    )
-                    time.sleep(2)
+                    # Wciąż w trakcie przetwarzania
+                    continue
             else:
                 raise Exception(
                     "Przekroczono limit prób sprawdzenia statusu uwierzytelniania"
@@ -351,20 +383,25 @@ class KsefClient:
 
             # Krok 4: Odbierz tokeny dostępowe (access i refresh)
             logger.info("Krok 4/4: Odbieranie tokenów dostępowych...")
-            redeem_url = f"{self.base_url}/auth/token/redeem"
-            redeem_response = requests.post(
-                redeem_url, headers=status_headers, timeout=10
-            )
-            redeem_response.raise_for_status()
-            tokens = redeem_response.json()
 
-            self.access_token = tokens["accessToken"]["token"]
-            self.refresh_token = tokens["refreshToken"]["token"]
+            # Token w odpowiedzi status może już zawierać finalne tokeny
+            if "sessionToken" in status_data:
+                session_token_data = status_data["sessionToken"]
+                self.access_token = session_token_data.get("token")
 
-            logger.info("✓ Pomyślnie uzyskano tokeny dostępowe (JWT)")
-            logger.info(
-                f"✓ Access token (pierwsze 30 znaków): {self.access_token[:30]}..."
-            )
+                # Refresh token może być opcjonalny
+                self.refresh_token = status_data.get("refreshToken", {}).get("token")
+
+                logger.info("✓ Pomyślnie uzyskano tokeny dostępowe")
+                logger.info(
+                    f"✓ Access token (pierwsze 30 znaków): {self.access_token[:30]}..."
+                )
+            else:
+                logger.error("Brak sessionToken w odpowiedzi statusowej")
+                raise Exception("Nie otrzymano sessionToken")
+
+            logger.info("=" * 70)
+            logger.info("UWIERZYTELNIANIE ZAKOŃCZONE POMYŚLNIE")
             logger.info("=" * 70)
 
         except requests.exceptions.RequestException as e:
@@ -509,109 +546,56 @@ class KsefClient:
             return self.public_key_cert
 
         try:
-            # Pobierz klucz publiczny z API KSeF
-            public_key_url = f"{self.base_url}/common/PublicKey"
+            # Endpoint zgodny z KSeF API 2.0
+            public_key_url = f"{self.base_url}/common/Credentials/Identifier/{self.nip}/Type/onip/RequestPublicKey"
 
-            logger.info(f"Pobieranie klucza publicznego z: {public_key_url}")
+            logger.info(f"Pobieranie klucza publicznego z API KSeF...")
+            logger.info(f"URL: {public_key_url}")
 
-            response = requests.get(public_key_url, timeout=10)
+            headers = {"Accept": "application/json"}
+            response = requests.get(public_key_url, headers=headers, timeout=10)
             response.raise_for_status()
 
-            # API zwraca JSON z kluczem w Base64
-            key_data = response.json()
+            # API zwraca JSON z kluczem
+            key_response = response.json()
+            logger.info(f"Odpowiedź API: {list(key_response.keys())}")
 
-            # Klucz jest w formacie: {"publicKey": "BASE64_ENCODED_KEY"}
-            public_key_base64 = key_data.get("publicKey")
+            # Klucz może być w różnych polach - sprawdźmy dokumentację
+            public_key_pem = key_response.get("publicKey") or key_response.get("key")
 
-            if not public_key_base64:
+            if not public_key_pem:
+                logger.error(f"Struktura odpowiedzi: {key_response}")
                 raise Exception("Brak klucza publicznego w odpowiedzi API")
 
-            # Dekoduj z Base64
-            public_key_bytes = base64.b64decode(public_key_base64)
+            # Klucz jest w formacie PEM (string z -----BEGIN PUBLIC KEY-----)
+            public_key_bytes = public_key_pem.encode("utf-8")
 
-            # Załaduj klucz - spróbuj najpierw jako certyfikat X.509
-            try:
-                cert = load_der_x509_certificate(public_key_bytes, default_backend())
-                self.public_key_cert = cert.public_key()
-                logger.info(
-                    f"✓ Wczytano klucz publiczny z API (certyfikat X.509, {self.public_key_cert.key_size} bitów)"
-                )
-            except Exception:
-                # Jeśli to nie certyfikat, spróbuj jako sam klucz publiczny
-                from cryptography.hazmat.primitives.serialization import (
-                    load_der_public_key,
-                )
+            # Załaduj klucz PEM
+            from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
-                self.public_key_cert = load_der_public_key(
-                    public_key_bytes, default_backend()
-                )
-                logger.info(
-                    f"✓ Wczytano klucz publiczny z API (raw key, {self.public_key_cert.key_size} bitów)"
-                )
+            self.public_key_cert = load_pem_public_key(
+                public_key_bytes, default_backend()
+            )
+
+            logger.info(f"✓ Pomyślnie wczytano klucz publiczny z API KSeF")
+            logger.info(f"✓ Typ klucza: {type(self.public_key_cert).__name__}")
+            logger.info(f"✓ Rozmiar klucza: {self.public_key_cert.key_size} bitów")
 
             return self.public_key_cert
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"❌ Błąd pobierania klucza publicznego z API: {e}")
-
-            # FALLBACK: spróbuj użyć lokalnego klucza (tylko dla testów)
-            logger.warning("⚠️  Próba użycia lokalnego klucza publicznego...")
-
-            pem_file = self.key_dir / "publicKey.pem"
-            der_file = self.key_dir / "publicKey.der"
-
-            if pem_file.exists():
-                logger.info(f"Wczytywanie lokalnego klucza z: {pem_file}")
-                with open(pem_file, "rb") as f:
-                    key_data = f.read()
-
+            logger.error(f"❌ Błąd HTTP podczas pobierania klucza: {e}")
+            if hasattr(e, "response") and e.response is not None:
                 try:
-                    cert = load_pem_x509_certificate(key_data, default_backend())
-                    self.public_key_cert = cert.public_key()
-                    logger.warning(
-                        f"⚠️  Wczytano lokalny klucz PEM (rozmiar: {self.public_key_cert.key_size} bitów)"
-                    )
-                except Exception:
-                    from cryptography.hazmat.primitives.serialization import (
-                        load_pem_public_key,
-                    )
-
-                    self.public_key_cert = load_pem_public_key(
-                        key_data, default_backend()
-                    )
-                    logger.warning(
-                        f"⚠️  Wczytano lokalny czysty klucz PEM (rozmiar: {self.public_key_cert.key_size} bitów)"
-                    )
-
-            elif der_file.exists():
-                logger.info(f"Wczytywanie lokalnego klucza z: {der_file}")
-                with open(der_file, "rb") as f:
-                    key_data = f.read()
-
-                try:
-                    cert = load_der_x509_certificate(key_data, default_backend())
-                    self.public_key_cert = cert.public_key()
-                    logger.warning(
-                        f"⚠️  Wczytano lokalny klucz DER (rozmiar: {self.public_key_cert.key_size} bitów)"
-                    )
-                except Exception:
-                    from cryptography.hazmat.primitives.serialization import (
-                        load_der_public_key,
-                    )
-
-                    self.public_key_cert = load_der_public_key(
-                        key_data, default_backend()
-                    )
-                    logger.warning(
-                        f"⚠️  Wczytano lokalny czysty klucz DER (rozmiar: {self.public_key_cert.key_size} bitów)"
-                    )
-            else:
-                raise Exception(
-                    f"Nie można pobrać klucza publicznego z API ani znaleźć lokalnego pliku w {self.key_dir}"
-                )
-
-            return self.public_key_cert
+                    error_detail = e.response.json()
+                    logger.error(f"Szczegóły błędu API: {error_detail}")
+                except:
+                    logger.error(f"Odpowiedź API: {e.response.text[:500]}")
+            raise Exception(f"Nie można pobrać klucza publicznego z API: {e}")
 
         except Exception as e:
-            logger.error(f"❌ Błąd wczytywania klucza publicznego: {e}")
+            logger.error(f"❌ Błąd przetwarzania klucza publicznego: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
             raise
