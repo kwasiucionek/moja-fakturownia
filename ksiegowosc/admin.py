@@ -5,6 +5,7 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.template.loader import render_to_string
+from ksef.services import send_invoice_to_ksef
 
 # Dodane importy dla KSeF
 from ksef.client import KsefClient
@@ -394,7 +395,7 @@ class InvoiceAdmin(admin.ModelAdmin):
         "ksef_session_id",
         "ksef_processing_description",
     )
-    actions = ["export_selected_to_jpk", "send_to_ksef"]
+    actions = ["export_selected_to_jpk", "send_to_ksef", "action_send_to_ksef"]
 
     class Media:
         css = {"all": ("admin/css/custom_admin.css",)}
@@ -451,43 +452,65 @@ class InvoiceAdmin(admin.ModelAdmin):
     ksef_status_colored.admin_order_field = "ksef_status"
 
     def _send_invoices_to_ksef(self, request, queryset):
-        sent_count = 0
-        error_count = 0
-        for invoice in queryset:
-            if invoice.ksef_reference_number:
-                self.message_user(
-                    request,
-                    f"Faktura {invoice.invoice_number} została już wysłana do KSeF.",
-                    messages.WARNING,
-                )
-                continue
-            try:
-                # === POPRAWIONA LINIA ===
-                # Używamy użytkownika z faktury, a nie zalogowanego admina
-                client = KsefClient(invoice.user)
+            sent_count = 0
+            error_count = 0
+            for invoice in queryset:
+                # 1. Sprawdzenie czy już nie wysłano
+                if invoice.ksef_reference_number:
+                    self.message_user(
+                        request,
+                        f"Faktura {invoice.invoice_number} ma już nadany numer KSeF.",
+                        messages.WARNING,
+                    )
+                    continue
 
-                invoice_xml = generate_invoice_xml(invoice)
-                response = client.send_invoice(invoice_xml)
+                try:
+                    # 2. Inicjalizacja klienta dla użytkownika faktury
+                    # Upewnij się, że ten użytkownik ma uzupełnione CompanyInfo z tokenem!
+                    client = KsefClient(invoice.user)
 
-                invoice.ksef_status = "Wysłano"
-                invoice.ksef_sent_at = timezone.now()
-                invoice.ksef_session_id = response.get("sessionID")
-                invoice.ksef_processing_description = response.get(
-                    "processingDescription"
-                )
-                invoice.save()
-                sent_count += 1
-            except Exception as e:
-                error_count += 1
-                invoice.ksef_status = "Błąd"
-                invoice.ksef_processing_description = str(e)
-                invoice.save()
-                self.message_user(
-                    request,
-                    f"Błąd przy wysyłce faktury {invoice.invoice_number}: {e}",
-                    messages.ERROR,
-                )
-        return sent_count, error_count
+                    # 3. Generowanie XML
+                    invoice_xml = generate_invoice_xml(invoice)
+
+                    # 4. Wysyłka (to trwa kilka sekund - autoryzacja + wysyłka + status)
+                    result = client.send_invoice(invoice_xml)
+
+                    # 5. Aktualizacja danych w bazie na podstawie wyniku z client.py
+                    invoice.ksef_session_id = result.get("session_reference")
+
+                    # Pobranie statusu i numeru KSeF z odpowiedzi
+                    status_data = result.get("status", {})
+                    ksef_number = status_data.get("ksefNumber")
+
+                    if ksef_number:
+                        invoice.ksef_reference_number = ksef_number
+                        invoice.ksef_status = "Przetworzono"
+                        invoice.ksef_processing_description = "Faktura poprawnie przyjęta przez KSeF."
+                    else:
+                        # Jeśli nie ma numeru KSeF, ale nie było błędu, to może wciąż jest przetwarzana
+                        invoice.ksef_status = "Wysłano"
+                        invoice.ksef_processing_description = f"Sesja zakończona. Kod powrotu: {status_data.get('status', {}).get('code')}"
+
+                    invoice.ksef_sent_at = timezone.now()
+                    invoice.save()
+
+                    sent_count += 1
+
+                except Exception as e:
+                    error_count += 1
+                    # Zapisujemy informację o błędzie w fakturze, żeby użytkownik widział co się stało
+                    invoice.ksef_status = "Błąd"
+                    invoice.ksef_processing_description = str(e)[:500] # Przycinamy zbyt długie komunikaty
+                    invoice.save()
+
+                    # Logowanie błędu do messages w adminie
+                    self.message_user(
+                        request,
+                        f"Błąd przy wysyłce faktury {invoice.invoice_number}: {e}",
+                        messages.ERROR,
+                    )
+
+            return sent_count, error_count
 
     @admin.action(description="Wyślij zaznaczone faktury do KSeF (z listy)")
     def send_to_ksef(self, request, queryset):
@@ -502,6 +525,29 @@ class InvoiceAdmin(admin.ModelAdmin):
             self.message_user(
                 request, f"Nie udało się wysłać {error_count} faktur.", messages.ERROR
             )
+
+    @admin.action(description='Wyślij wybrane faktury do KSeF')
+        def action_send_to_ksef(self, request, queryset):
+            success_count = 0
+            error_count = 0
+
+            for invoice in queryset:
+                # Wywołanie logiki z services.py
+                result = send_invoice_to_ksef(invoice.id)
+
+                if result['success']:
+                    success_count += 1
+                else:
+                    error_count += 1
+                    self.message_user(
+                        request,
+                        f"Błąd przy fakturze {invoice.invoice_number}: {result['message']}",
+                        level=messages.ERROR
+                    )
+
+            if success_count > 0:
+                self.message_user(request, f"Pomyślnie wysłano {success_count} faktur do KSeF.", level=messages.SUCCESS)
+
 
     def send_to_ksef_view(self, request):
         selected_ids_str = request.GET.get("ids")
