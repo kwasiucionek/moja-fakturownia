@@ -615,40 +615,39 @@ def action_send_to_ksef(self, request, queryset):  # <<<< POPRAWIONE WCIĘCIE
     def get_urls(self):
         urls = super().get_urls()
 
-        # Helper function to create a full name
-        def info(model_name):
-            return self.model._meta.app_label, self.model._meta.model_name
+        # Poprawiona definicja - bez niepotrzebnej funkcji helper
+        info = self.model._meta.app_label, self.model._meta.model_name
 
         my_urls = [
             path(
                 "<int:object_id>/change/generate-pdf/",
                 self.admin_site.admin_view(self.generate_pdf_view),
-                name="%s_%s_pdf" % info(self.model),
+                name="%s_%s_pdf" % info,
             ),
             path(
                 "import-jpk/",
                 self.admin_site.admin_view(self.import_jpk_view),
-                name="%s_%s_import_jpk" % info(self.model),
+                name="%s_%s_import_jpk" % info,
             ),
             path(
                 "export-jpk/",
                 self.admin_site.admin_view(self.export_jpk_view),
-                name="%s_%s_export_jpk" % info(self.model),
+                name="%s_%s_export_jpk" % info,
             ),
             path(
                 "send-ksef/",
                 self.admin_site.admin_view(self.send_to_ksef_view),
-                name="%s_%s_send_ksef" % info(self.model),
+                name="%s_%s_send_ksef" % info,
             ),
             path(
                 "payments-report/",
                 self.admin_site.admin_view(self.payments_report_view),
-                name="%s_%s_payments_report" % info(self.model),
+                name="%s_%s_payments_report" % info,
             ),
             path(
                 "overdue-report/",
                 self.admin_site.admin_view(self.overdue_report_view),
-                name="%s_%s_overdue_report" % info(self.model),
+                name="%s_%s_overdue_report" % info,
             ),
         ]
         return my_urls + urls
