@@ -16,38 +16,24 @@ from django.urls import path
 from django.utils import timezone
 from django.utils.html import format_html
 
-# Importy usług KSeF
+# Importy usług KSeF - upewnij się, że w tych plikach nie ma importów z ksiegowosc.models na górze!
 from ksef.client import KsefClient
 from ksef.services import send_invoice_to_ksef
 from ksef.xml_generator import generate_invoice_xml
 
-# Bezpieczny import modeli wewnątrz modułu admina
-try:
-    from .models import (
-        CompanyInfo,
-        Contractor,
-        ExpenseCategory,
-        Invoice,
-        InvoiceItem,
-        MonthlySettlement,
-        Payment,
-        PurchaseInvoice,
-        YearlySettlement,
-        ZUSRates,
-    )
-except (ImportError, RuntimeError):
-    # W niektórych specyficznych konfiguracjach Django, modele mogą być jeszcze niedostępne
-    from django.apps import apps
-    CompanyInfo = apps.get_model('ksiegowosc', 'CompanyInfo')
-    Contractor = apps.get_model('ksiegowosc', 'Contractor')
-    ExpenseCategory = apps.get_model('ksiegowosc', 'ExpenseCategory')
-    Invoice = apps.get_model('ksiegowosc', 'Invoice')
-    InvoiceItem = apps.get_model('ksiegowosc', 'InvoiceItem')
-    MonthlySettlement = apps.get_model('ksiegowosc', 'MonthlySettlement')
-    Payment = apps.get_model('ksiegowosc', 'Payment')
-    PurchaseInvoice = apps.get_model('ksiegowosc', 'PurchaseInvoice')
-    YearlySettlement = apps.get_model('ksiegowosc', 'YearlySettlement')
-    ZUSRates = apps.get_model('ksiegowosc', 'ZUSRates')
+# Standardowy import modeli. Jeśli ksef.* nie importują niczego na górze, to nie będzie błędu.
+from .models import (
+    CompanyInfo,
+    Contractor,
+    ExpenseCategory,
+    Invoice,
+    InvoiceItem,
+    MonthlySettlement,
+    Payment,
+    PurchaseInvoice,
+    YearlySettlement,
+    ZUSRates,
+)
 
 # ==== CUSTOM FILTER DLA STATUSU PŁATNOŚCI ====
 
@@ -86,9 +72,7 @@ class CompanyInfoAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        return qs.filter(user=request.user)
+        return qs if request.user.is_superuser else qs.filter(user=request.user)
 
     def save_model(self, request, obj, form, change):
         if not hasattr(obj, "user") or not obj.user:
