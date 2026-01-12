@@ -1,11 +1,15 @@
 # kwasiucionek/moja-fakturownia/moja-fakturownia-a0f550ee045da0fa60a613fb7a8884b3052e00a0/ksef/xml_generator.py
 
+# USUNIĘTO: from ksiegowosc.models import Invoice (zapobieganie cyklicznym importom)
 from datetime import datetime
 from decimal import Decimal
 
 
 def _xml_escape(text):
     """Prosta funkcja do escape'owania znaków specjalnych w XML."""
+    if text is None:
+        return ""
+    text = str(text)
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")
     text = text.replace(">", "&gt;")
@@ -14,10 +18,14 @@ def _xml_escape(text):
     return text
 
 
-def generate_invoice_xml(invoice: Invoice) -> str:
+def generate_invoice_xml(invoice) -> str:
     """
     Generuje fakturę w formacie XML zgodnym ze schemą FA(3).
+    Usunięto adnotację typu ': Invoice', aby uniknąć NameError przy starcie aplikacji.
     """
+    # Import lokalny wewnątrz funkcji, aby przerwać cykl importów
+    from ksiegowosc.models import Invoice
+
     company = invoice.user.companyinfo
     contractor = invoice.contractor
 
