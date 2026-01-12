@@ -1,6 +1,5 @@
 # kwasiucionek/moja-fakturownia/moja-fakturownia-a0f550ee045da0fa60a613fb7a8884b3052e00a0/ksef/xml_generator.py
 
-from ksiegowosc.models import Invoice
 from datetime import datetime
 from decimal import Decimal
 
