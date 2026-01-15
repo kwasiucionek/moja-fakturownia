@@ -1,18 +1,20 @@
 # ksef/services.py
 
 import logging
+
+import requests
 from django.utils import timezone
-# Usunięto: from ksiegowosc.models import Invoice
+
 from .client import KsefClient
 from .xml_generator import generate_invoice_xml
 
 logger = logging.getLogger(__name__)
 
+
 def send_invoice_to_ksef(invoice_id: int):
     """
-    Orkiestrator procesu wysyłki faktury do KSeF.
+    Orkiestrator procesu wysyłki faktury do KSeF z obsługą szczegółowych błędów API.
     """
-    # Import lokalny przerywa cykl importów
     from ksiegowosc.models import Invoice
 
     try:
@@ -20,8 +22,8 @@ def send_invoice_to_ksef(invoice_id: int):
     except Invoice.DoesNotExist:
         return {"success": False, "message": "Faktura nie istnieje."}
 
-    # Sprawdzenie czy już nie wysłano
-    if invoice.ksef_status == "Success" and invoice.ksef_reference_number:
+    # Sprawdzenie czy już nie wysłano (zgodnie z wyborem statusu w modelu)
+    if invoice.ksef_status == "success" and invoice.ksef_number:
         return {"success": False, "message": "Ta faktura została już wysłana do KSeF."}
 
     try:
@@ -31,22 +33,43 @@ def send_invoice_to_ksef(invoice_id: int):
 
         invoice.ksef_reference_number = result.get("invoice_reference")
         invoice.ksef_session_id = result.get("session_reference")
-        invoice.ksef_status = "Success"
+        invoice.ksef_status = "success"
         invoice.ksef_sent_at = timezone.now()
-        invoice.ksef_processing_description = "Wysłano pomyślnie. Czekaj na UPO."
+        invoice.ksef_processing_description = (
+            "Wysłano pomyślnie. Dokument przyjęty do przetwarzania."
+        )
         invoice.save()
-
-        logger.info(f"Faktura {invoice.invoice_number} wysłana do KSeF. Ref: {invoice.ksef_reference_number}")
 
         return {
             "success": True,
             "message": f"Wysłano pomyślnie. Nr Ref: {invoice.ksef_reference_number}",
         }
 
-    except Exception as e:
-        error_message = str(e)
-        logger.error(f"Błąd wysyłki do KSeF dla faktury {invoice.id}: {error_message}")
-        invoice.ksef_status = "Error"
+    except requests.exceptions.HTTPError as e:
+        # Próba wyciągnięcia szczegółów błędu z odpowiedzi API KSeF
+        try:
+            error_data = e.response.json()
+            # Wyciągamy opis z pól 'exception' i 'message' zwracanych przez KSeF
+            details = (
+                error_data.get("exception", {})
+                .get("exceptionDetailList", [{}])[0]
+                .get("description", "")
+            )
+            error_message = (
+                f"Błąd API ({e.response.status_code}): {details or e.response.text}"
+            )
+        except:
+            error_message = f"Błąd HTTP {e.response.status_code}: {str(e)}"
+
+        invoice.ksef_status = "error"
         invoice.ksef_processing_description = error_message[:500]
         invoice.save()
-        return {"success": False, "message": f"Błąd: {error_message}"}
+        return {"success": False, "message": error_message}
+
+    except Exception as e:
+        error_message = str(e)
+        logger.error(f"Błąd systemowy KSeF: {error_message}")
+        invoice.ksef_status = "error"
+        invoice.ksef_processing_description = error_message[:500]
+        invoice.save()
+        return {"success": False, "message": error_message}
