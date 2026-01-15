@@ -34,7 +34,7 @@ class KsefClient:
 
         env = self.company_info.ksef_environment
         if env == "test":
-            self.base_url = "https://ksef-test.mf.gov.pl/api/v2"
+            self.base_url = "https://api-test.ksef.mf.gov.pl/v2"
         else:
             self.base_url = "https://ksef.mf.gov.pl/api/v2"
 

@@ -113,11 +113,16 @@ class AdminLoginRedirectMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # Sprawdź dokładną ścieżkę
-        if request.path == '/admin/login/':
-            next_url = request.GET.get('next', '/admin/')
-            return redirect(f'/auth/login/?next={next_url}')
+        # Ta linia wyrzuca błąd, jeśli AuthenticationMiddleware nie zadziałał wcześniej
+        if request.user.is_authenticated and not request.user.is_superuser:
+            company_info_url = reverse('admin:ksiegowosc_companyinfo_add')
+            company_list_url = reverse('admin:ksiegowosc_companyinfo_changelist')
+            logout_url = reverse('admin:logout')
 
-        # Kontynuuj obsługę normalnie
-        response = self.get_response(request)
-        return response
+            has_company = CompanyInfo.objects.filter(user=request.user).exists()
+
+            if not has_company and request.path not in [company_info_url, company_list_url, logout_url]:
+                if not request.path.startswith('/static/') and not request.path.startswith('/media/'):
+                    return redirect(company_info_url)
+
+        return self.get_response(request)
