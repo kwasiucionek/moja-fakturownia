@@ -22,7 +22,7 @@ def send_invoice_to_ksef(invoice_id: int):
     except Invoice.DoesNotExist:
         return {"success": False, "message": "Faktura nie istnieje."}
 
-    # Sprawdzenie czy już nie wysłano (zgodnie z wyborem statusu w modelu)
+    # Sprawdzenie czy juÅ¼ nie Wysłano (zgodnie z wyborem statusu w modelu)
     if invoice.ksef_status == "success" and invoice.ksef_number:
         return {"success": False, "message": "Ta faktura została już wysłana do KSeF."}
 
