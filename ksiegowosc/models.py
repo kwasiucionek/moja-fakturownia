@@ -583,15 +583,29 @@ class CompanyInfo(models.Model):
     )
 
     # Pola konfiguracyjne KSeF
-    ksef_token = models.CharField(
-        max_length=255, blank=True, null=True, verbose_name="Token KSeF"
+    ksef_token = models.TextField(
+        blank=True,  # ← DODANE
+        null=True,   # ← DODANE
+        verbose_name='Token KSeF',
+        help_text='Token autoryzacyjny wygenerowany w Aplikacji Podatnika KSeF. '
+
     )
+
     ksef_environment = models.CharField(
-        max_length=10,
-        choices=[("test", "Testowe"), ("prod", "Produkcyjne")],
-        default="test",
-        verbose_name="Środowisko KSeF",
+        max_length=20,
+        choices=[
+            ('test', 'Test'),
+            ('demo', 'DEMO'),
+            ('production', 'Produkcja'),
+        ],
+        default='test',
+        blank=True,  # ← DODANE
+        null=True,   # ← DODANE
+        verbose_name='Środowisko KSeF',
+        help_text='Wybierz środowisko do wysyłki faktur: Test (testowe), '
+                  'DEMO (przedprodukcyjne) lub Produkcja (faktyczne faktury)'
     )
+
 
     class Meta:
         verbose_name = "Dane Firmy"
@@ -712,6 +726,13 @@ class Invoice(models.Model):
     )
     ksef_processing_description = models.TextField(
         blank=True, null=True, verbose_name="Opis statusu KSeF"
+    )
+
+    ksef_upo = models.BinaryField(
+        null=True,
+        blank=True,
+        verbose_name='UPO (XML)',
+        help_text='Urzędowe Poświadczenie Odbioru w formacie XML',
     )
 
     class Meta:

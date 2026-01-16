@@ -1,128 +1,58 @@
 # ksiegowosc/middleware.py
 
 from django.shortcuts import redirect
-from django.contrib import messages
 from django.urls import reverse
-from django.contrib.auth.decorators import login_required
-from django.utils.decorators import method_decorator
 from .models import CompanyInfo
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class CompanyInfoRequiredMiddleware:
+class AdminLoginRedirectMiddleware:
     """
-    Middleware sprawdzający czy zalogowany użytkownik ma uzupełnione dane firmy.
-    Jeśli nie, przekierowuje do formularza dodawania danych firmy.
+    Middleware przekierowujący użytkowników bez danych firmy
+    do formularza uzupełnienia CompanyInfo.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
-        # Ścieżki, które nie wymagają danych firmy
-        self.exempt_paths = [
-            '/auth/',
-            '/admin/ksiegowosc/companyinfo/add/',
-            '/admin/ksiegowosc/companyinfo/',
-            '/admin/logout/',
-            '/admin/password_change/',
+        # Ścieżki zwolnione ze sprawdzania
+        self.exempt_prefixes = [
+            '/static/',
+            '/media/',
+            '/__debug__/',
             '/health/',
-            '/social-auth/',
+            '/auth/',
+            '/admin/logout/',
             '/admin/jsi18n/',
+            '/admin/ksiegowosc/companyinfo/',  # KLUCZOWE - cała ścieżka companyinfo
         ]
 
     def __call__(self, request):
-        # Sprawdź czy to jest żądanie, które wymaga sprawdzenia
-        if self.should_check_company_info(request):
-            # Sprawdź czy użytkownik ma dane firmy
-            if not self.user_has_company_info(request.user):
-                messages.warning(
-                    request,
-                    'Aby korzystać z systemu, musisz najpierw uzupełnić podstawowe dane swojej firmy.'
-                )
-                return redirect('admin:ksiegowosc_companyinfo_add')
+        # Sprawdź czy użytkownik istnieje i jest zalogowany
+        if not hasattr(request, 'user') or not request.user.is_authenticated:
+            return self.get_response(request)
 
-        response = self.get_response(request)
-        return response
-
-    def should_check_company_info(self, request):
-        """Sprawdza czy dla danego żądania trzeba sprawdzić dane firmy"""
-        # Sprawdź czy użytkownik jest zalogowany
-        if not request.user.is_authenticated:
-            return False
-
-        # Sprawdź czy to nie jest superuser (superuser może wszystko)
+        # Superuser może wszystko
         if request.user.is_superuser:
-            return False
+            return self.get_response(request)
+
+        path = request.path
 
         # Sprawdź czy ścieżka jest zwolniona
-        path = request.path
-        for exempt_path in self.exempt_paths:
-            if path.startswith(exempt_path):
-                return False
+        for prefix in self.exempt_prefixes:
+            if path.startswith(prefix):
+                return self.get_response(request)
 
-        # Sprawdź czy to żądanie AJAX - nie przekierowuj
+        # Sprawdź czy to żądanie AJAX
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return False
+            return self.get_response(request)
 
-        return True
+        # Sprawdź czy użytkownik ma profil firmy
+        has_company = CompanyInfo.objects.filter(user=request.user).exists()
 
-    def user_has_company_info(self, user):
-        """Sprawdza czy użytkownik ma uzupełnione podstawowe dane firmy"""
-        try:
-            company_info = CompanyInfo.objects.get(user=user)
-            # Sprawdź czy wypełnione są podstawowe pola
-            required_fields = ['company_name', 'tax_id', 'street', 'city', 'zip_code']
-            for field in required_fields:
-                if not getattr(company_info, field, '').strip():
-                    return False
-            return True
-        except CompanyInfo.DoesNotExist:
-            return False
-
-
-class UserGroupMiddleware:
-    """
-    Middleware sprawdzający czy użytkownik należy do odpowiedniej grupy
-    """
-
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    def __call__(self, request):
-        if (request.user.is_authenticated and
-            not request.user.is_superuser and
-            request.path.startswith('/admin/') and
-            not request.path.startswith('/admin/logout/')):
-
-            # Sprawdź czy użytkownik należy do grupy ksiegowosc
-            if not request.user.groups.filter(name='ksiegowosc').exists():
-                messages.error(
-                    request,
-                    'Nie masz uprawnień do tej sekcji. Skontaktuj się z administratorem.'
-                )
-                return redirect('auth:login')
-
-        response = self.get_response(request)
-        return response
-
-from django.shortcuts import redirect
-
-class AdminLoginRedirectMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    def __call__(self, request):
-        # Ta linia wyrzuca błąd, jeśli AuthenticationMiddleware nie zadziałał wcześniej
-        if request.user.is_authenticated and not request.user.is_superuser:
-            company_info_url = reverse('admin:ksiegowosc_companyinfo_add')
-            company_list_url = reverse('admin:ksiegowosc_companyinfo_changelist')
-            logout_url = reverse('admin:logout')
-
-            has_company = CompanyInfo.objects.filter(user=request.user).exists()
-
-            if not has_company and request.path not in [company_info_url, company_list_url, logout_url]:
-                if not request.path.startswith('/static/') and not request.path.startswith('/media/'):
-                    return redirect(company_info_url)
+        if not has_company:
+            logger.debug(f"User {request.user.username} has no CompanyInfo, redirecting from {path}")
+            return redirect('admin:ksiegowosc_companyinfo_add')
 
         return self.get_response(request)
