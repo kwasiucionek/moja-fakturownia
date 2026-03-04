@@ -2,7 +2,7 @@
 
 Kompleksowy system księgowy dla jednoosobowych działalności gospodarczych. Aplikacja Django z panelem administracyjnym umożliwiającym zarządzanie fakturami, kosztami, płatnościami oraz automatyczne rozliczenia podatkowe i składki ZUS. Aplikacja jest również Progresywną Aplikacją Webową (PWA), co umożliwia jej instalację na urządzeniach i pracę w trybie offline.
 
-Wersja demonstracyjna, w pełni funkcjonalna: https://kwasiucionek.cytr.us/
+Wersja demonstracyjna, w pełni funkcjonalna: [https://kwasiucionek.cytr.us/](https://moja-fakturownia.cytr.us)
 
 ## ✨ Funkcjonalności
 
