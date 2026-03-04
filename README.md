@@ -256,12 +256,6 @@ Jeśli chcesz przyczynić się do rozwoju projektu:
 4. Push do brancha (`git push origin feature/AmazingFeature`)
 5. Otwórz Pull Request
 
-## 📞 Kontakt
-
-W przypadku pytań lub problemów:
-- Otwórz issue na GitHubie
-- Email: twoj-email@example.com
-
 ## 📚 Dodatkowe zasoby
 
 - [Dokumentacja Django](https://docs.djangoproject.com/)
