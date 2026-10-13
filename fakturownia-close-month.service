@@ -1,0 +1,12 @@
+[Unit]
+Description=Fakturownia — agent zamknięcia miesiąca (szkic rozliczenia i raport)
+After=network.target
+
+[Service]
+Type=oneshot
+User=fakturownia
+Group=www-data
+WorkingDirectory=/cytrus/fakturownia
+EnvironmentFile=/cytrus/fakturownia/.env
+ExecStart=/cytrus/fakturownia/venv/bin/python manage.py close_month
+SyslogIdentifier=fakturownia-close-month

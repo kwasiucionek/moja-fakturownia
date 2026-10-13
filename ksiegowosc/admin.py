@@ -3,7 +3,7 @@
 import json
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import admin, messages
@@ -167,7 +167,10 @@ class CompanyInfoAdmin(admin.ModelAdmin):
                     "zus_code",
                     "preferential_zus",
                     "small_zus_plus",
+                    "small_zus_plus_base",
                     "zus_health_insurance_only",
+                    "zus_start_relief",
+                    "zus_sickness_insurance",
                 ),
                 "description": "Ustawienia dotyczące składek ZUS",
             },
@@ -1150,11 +1153,27 @@ class InvoiceAdmin(admin.ModelAdmin):
 @admin.register(MonthlySettlement)
 class MonthlySettlementAdmin(admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/monthlysettlement/change_list.html"
-    list_display = ("year", "month", "total_revenue", "income_tax_payable", "user")
-    list_filter = ("year", "month", "user")
+    list_display = (
+        "year",
+        "month",
+        "total_revenue",
+        "health_insurance_paid",
+        "income_tax_payable",
+        "status",
+        "user",
+    )
+    list_filter = ("status", "year", "month", "user")
     search_fields = ("year", "month")
-    readonly_fields = ("created_at",)
+    readonly_fields = ("created_at", "approved_at", "details")
     exclude = ("user",)
+    actions = ["approve_settlements"]
+
+    @admin.action(description="Zatwierdź zaznaczone rozliczenia")
+    def approve_settlements(self, request, queryset):
+        updated = queryset.filter(status="draft").update(
+            status="approved", approved_at=timezone.now()
+        )
+        messages.success(request, f"Zatwierdzono rozliczeń: {updated}.")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -1604,88 +1623,128 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
         return render(request, "admin/enhanced_dashboard.html", context)
 
     def calculate_view(self, request):
+        """Rozliczenie miesięczne liczone silnikiem (ksiegowosc.tax_engine) — stawka z danych firmy."""
+        from . import settlements
+        from .tax_engine import MissingYearParams
+
         context = {
             "opts": self.model._meta,
             "title": "Obliczanie Rozliczenia Miesięcznego",
         }
-        current_year = datetime.now().year
+        today = timezone.localdate()
         context["years"], context["months"] = (
-            list(range(current_year - 5, current_year + 1)),
+            list(range(today.year - 5, today.year + 1)),
             list(range(1, 13)),
         )
         company_info = CompanyInfo.objects.filter(user=request.user).first()
         context["company_info"] = company_info
         if company_info:
+            # Podpowiedź kwot: składki należne za bieżący miesiąc wg silnika
             try:
-                zus_rates = ZUSRates.get_current_rates()
-                if zus_rates:
-                    context["calculated_rates"], context["zus_rates"] = (
-                        zus_rates.calculate_social_insurance(company_info),
-                        zus_rates,
-                    )
-            except:
-                context["zus_rates"], context["calculated_rates"] = None, None
+                due = settlements.monthly_obligations(request.user, today.year, today.month)
+                zus = due["zus_za_miesiac"]
+                context["calculated_rates"] = {
+                    "base": zus["spoleczne"]["podstawa"],
+                    "social_insurance_total": zus["spoleczne"]["spoleczne_razem"],
+                    "labor_fund": zus["spoleczne"]["fundusz_pracy"],
+                    "health_insurance_total": zus["zdrowotna"]["skladka"],
+                }
+                context["zus_rates"] = {"year": today.year}
+            except (settlements.SettlementError, MissingYearParams) as exc:
+                messages.warning(request, str(exc))
         if request.method == "POST":
             try:
-                month, year = (
-                    int(request.POST.get("month")),
-                    int(request.POST.get("year")),
-                )
-                health, social, labor = (
-                    Decimal(
-                        request.POST.get("health_insurance_paid", "0").replace(",", ".")
-                    ),
-                    Decimal(
-                        request.POST.get("social_insurance_paid", "0").replace(",", ".")
-                    ),
-                    Decimal(request.POST.get("labor_fund_paid", "0").replace(",", ".")),
-                )
-                total_revenue = Invoice.objects.filter(
-                    user=request.user, issue_date__year=year, issue_date__month=month
-                ).aggregate(total=Sum("total_amount"))["total"] or Decimal("0.00")
-                tax_base_after_health = max(
-                    Decimal("0.00"), (total_revenue - social) - (health / 2)
-                )
-                income_tax_payable = round(tax_base_after_health * Decimal("0.14"))
-                settlement, created = MonthlySettlement.objects.update_or_create(
-                    user=request.user,
-                    year=year,
-                    month=month,
-                    defaults={
-                        "total_revenue": total_revenue,
-                        "health_insurance_paid": health,
-                        "social_insurance_paid": social,
-                        "labor_fund_paid": labor,
-                        "income_tax_payable": income_tax_payable,
-                    },
+                year = int(request.POST.get("year"))
+                month = int(request.POST.get("month"))
+
+                def amount(name):
+                    return Decimal((request.POST.get(name) or "0").replace(",", ".").replace(" ", ""))
+
+                settlement, created, _ = settlements.save_monthly_settlement(
+                    request.user,
+                    year,
+                    month,
+                    health_paid=amount("health_insurance_paid"),
+                    social_paid=amount("social_insurance_paid"),
+                    labor_fund_paid=amount("labor_fund_paid"),
+                    status="approved",
+                    overwrite_approved=True,
                 )
                 context["settlement"], context["submitted"] = settlement, True
-            except Exception as e:
-                messages.error(request, f"Błąd podczas obliczania: {e}")
+            except (settlements.SettlementError, MissingYearParams, InvalidOperation, ValueError) as exc:
+                messages.error(request, f"Błąd podczas obliczania: {exc}")
         return render(request, "ksiegowosc/settlement_form.html", context)
 
     def zus_calculator_view(self, request):
+        """Kalkulator składek liczony silnikiem (ksiegowosc.tax_engine)."""
+        from . import settlements
+        from .tax_engine import (
+            YEAR_PARAMS,
+            ZUS_VARIANT_LABELS,
+            MissingYearParams,
+            get_year_params,
+            lump_sum_health_contribution,
+            social_contributions,
+        )
+
+        today = timezone.localdate()
+        try:
+            year = int(request.GET.get("year", today.year))
+        except ValueError:
+            year = today.year
         context = {
             "opts": self.model._meta,
             "title": "Kalkulator składek ZUS",
-            "current_year": timezone.now().year,
+            "year": year,
+            "available_years": sorted(YEAR_PARAMS),
         }
-        company_info = CompanyInfo.objects.filter(user=request.user).first()
-        context["company_info"] = company_info
         try:
-            zus_rates = ZUSRates.get_current_rates()
-            context["zus_rates"] = zus_rates
-        except:
-            zus_rates = context["zus_rates"] = None
-        if company_info and zus_rates:
-            annual_income = request.GET.get("annual_income")
+            params = get_year_params(year)
+        except MissingYearParams as exc:
+            context["error"] = str(exc)
+            return render(request, "ksiegowosc/zus_calculator.html", context)
+        context["params"] = params
+
+        revenue_ytd = None
+        company = CompanyInfo.objects.filter(user=request.user).first()
+        if company:
+            profile = company.contribution_profile()
+            context["variant_label"] = ZUS_VARIANT_LABELS[profile.zus_variant]
             try:
-                annual_income = Decimal(annual_income)
-            except:
-                annual_income = None
-            context["calculated_rates"] = zus_rates.calculate_social_insurance(
-                company_info, annual_income
+                social = social_contributions(year, profile)
+                context["social"] = social.as_dict()
+            except ValueError as exc:
+                context["error"] = str(exc)
+                social = None
+            end = today if year == today.year else date(year, 12, 31)
+            revenue_ytd = settlements.revenue_between(
+                request.user, date(year, 1, 1), end, Decimal(company.lump_sum_rate or "14")
+            ).total
+            if social is not None and profile.tax_form == "ryczalt_ewidencjonowany":
+                health = lump_sum_health_contribution(year, revenue_ytd)["skladka"]
+                context["monthly_total"] = social.total + health
+        context["revenue_ytd"] = revenue_ytd
+
+        tiers = []
+        lower = Decimal("0")
+        for threshold, _ in params.lump_sum_health_thresholds:
+            probe = threshold if threshold is not None else lower + 1
+            amount = lump_sum_health_contribution(year, probe)["skladka"]
+            label = (
+                f"przychód do {threshold:,.0f} zł".replace(",", " ")
+                if threshold is not None
+                else f"przychód powyżej {lower:,.0f} zł".replace(",", " ")
             )
+            if revenue_ytd is None:
+                active = False
+            elif threshold is None:
+                active = revenue_ytd > lower
+            else:
+                active = revenue_ytd <= threshold and (revenue_ytd > lower or lower == 0)
+            tiers.append({"label": label, "amount": amount, "active": active})
+            if threshold is not None:
+                lower = threshold
+        context["health_tiers"] = tiers
         return render(request, "ksiegowosc/zus_calculator.html", context)
 
     def get_queryset(self, request):
@@ -1775,71 +1834,42 @@ class YearlySettlementAdmin(admin.ModelAdmin):
         return my_urls + urls
 
     def calculate_yearly_view(self, request):
+        """Rozliczenie roczne (PIT-28) liczone silnikiem z przychodów wg stawek i zapłaconych składek."""
+        from . import settlements
+        from .tax_engine import MissingYearParams
+
         context = {"opts": self.model._meta, "title": "Obliczanie Rozliczenia Rocznego"}
         if request.method == "POST":
-            year, tax_rate, notes = (
-                int(request.POST.get("year")),
-                Decimal(request.POST.get("tax_rate", "14.00")),
-                request.POST.get("notes", ""),
-            )
-            monthly_settlements = MonthlySettlement.objects.filter(
-                user=request.user, year=year
-            ).order_by("month")
-            if not monthly_settlements.exists():
-                messages.error(
+            try:
+                year = int(request.POST.get("year"))
+                notes = request.POST.get("notes", "")
+                settlement, created, result = settlements.save_annual_settlement(request.user, year, notes=notes)
+                for note in result["uwagi"]:
+                    messages.info(request, note)
+                health = result["zdrowotna_roczna"]
+                diff_key = "doplata" if "doplata" in health else "nadplata"
+                messages.info(
                     request,
-                    f"Brak rozliczeń miesięcznych za rok {year}. Najpierw utwórz rozliczenia miesięczne.",
+                    f"Roczna składka zdrowotna: {diff_key} {health[diff_key]} zł "
+                    f"(termin {health['termin']:%d.%m.%Y}).",
                 )
                 context.update(
-                    {"years": range(datetime.now().year - 5, datetime.now().year + 1)}
+                    {
+                        "yearly_settlement": settlement,
+                        "monthly_settlements": MonthlySettlement.objects.filter(
+                            user=request.user, year=year
+                        ).order_by("month"),
+                        "submitted": True,
+                        "created": created,
+                    }
                 )
-                return render(
-                    request, "ksiegowosc/yearly_settlement_form.html", context
-                )
-            totals = monthly_settlements.aggregate(
-                total_revenue=Sum("total_revenue"),
-                total_social=Sum("social_insurance_paid"),
-                total_health=Sum("health_insurance_paid"),
-                total_labor=Sum("labor_fund_paid"),
-                total_monthly_tax=Sum("income_tax_payable"),
-            )
-            rev, soc, hea, lab, paid = (
-                totals["total_revenue"] or Decimal("0.00"),
-                totals["total_social"] or Decimal("0.00"),
-                totals["total_health"] or Decimal("0.00"),
-                totals["total_labor"] or Decimal("0.00"),
-                totals["total_monthly_tax"] or Decimal("0.00"),
-            )
-            calc_tax = (
-                max(Decimal("0.00"), (rev - soc) - (hea / 2)) * tax_rate / 100
-            ).quantize(Decimal("0.01"))
-            settlement, created = YearlySettlement.objects.update_or_create(
-                user=request.user,
-                year=year,
-                defaults={
-                    "total_yearly_revenue": rev,
-                    "total_social_insurance_paid": soc,
-                    "total_health_insurance_paid": hea,
-                    "total_labor_fund_paid": lab,
-                    "total_monthly_tax_paid": paid,
-                    "calculated_yearly_tax": calc_tax,
-                    "tax_difference": calc_tax - paid,
-                    "tax_rate_used": tax_rate,
-                    "notes": notes,
-                },
-            )
-            context.update(
-                {
-                    "yearly_settlement": settlement,
-                    "monthly_settlements": monthly_settlements,
-                    "submitted": True,
-                    "created": created,
-                }
-            )
+            except (settlements.SettlementError, MissingYearParams, ValueError) as exc:
+                messages.error(request, f"Błąd podczas obliczania: {exc}")
+        company = CompanyInfo.objects.filter(user=request.user).first()
         context.update(
             {
                 "years": range(datetime.now().year - 5, datetime.now().year + 1),
-                "default_tax_rate": "14.00",
+                "default_tax_rate": company.lump_sum_rate if company and company.lump_sum_rate else "14.00",
             }
         )
         return render(request, "ksiegowosc/yearly_settlement_form.html", context)

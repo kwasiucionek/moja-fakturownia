@@ -1,0 +1,9 @@
+[Unit]
+Description=Fakturownia — zamknięcie poprzedniego miesiąca (3. dnia o 7:15)
+
+[Timer]
+OnCalendar=*-*-03 07:15:00 Europe/Warsaw
+Persistent=true
+
+[Install]
+WantedBy=timers.target

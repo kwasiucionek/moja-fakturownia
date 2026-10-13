@@ -543,6 +543,22 @@ class CompanyInfo(models.Model):
     zus_health_insurance_only = models.BooleanField(
         default=False, verbose_name="Tylko składka zdrowotna"
     )
+    zus_sickness_insurance = models.BooleanField(
+        default=False, verbose_name="Dobrowolne ubezpieczenie chorobowe"
+    )
+    zus_start_relief = models.BooleanField(
+        default=False,
+        verbose_name="Ulga na start",
+        help_text="Pierwsze 6 miesięcy działalności bez składek społecznych — wyłącz po jej zakończeniu.",
+    )
+    small_zus_plus_base = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Podstawa Małego ZUS Plus",
+        help_text="Miesięczna podstawa wyliczona z dochodu za poprzedni rok (wymagana przy Małym ZUS Plus).",
+    )
 
     pkd_code = models.CharField(max_length=10, blank=True, verbose_name="Kod PKD")
     pkd_description = models.CharField(
@@ -619,6 +635,28 @@ class CompanyInfo(models.Model):
 
     def is_vat_exempt(self):
         return self.vat_settlement == "zwolniony" or not self.vat_payer
+
+    def contribution_profile(self):
+        """Profil dla silnika obliczeń (ksiegowosc.tax_engine)."""
+        from .tax_engine import ContributionProfile
+
+        if self.zus_health_insurance_only or not self.zus_payer:
+            variant = "health_only"
+        elif self.zus_start_relief:
+            variant = "start_relief"
+        elif self.preferential_zus:
+            variant = "preferential"
+        elif self.small_zus_plus:
+            variant = "small_zus_plus"
+        else:
+            variant = "full"
+        return ContributionProfile(
+            tax_form=self.income_tax_type,
+            zus_variant=variant,
+            sickness_insurance=self.zus_sickness_insurance,
+            small_zus_plus_base=self.small_zus_plus_base,
+            default_lump_sum_rate=Decimal(self.lump_sum_rate or "14"),
+        )
 
     def get_tax_rate(self):
         if self.income_tax_type == "ryczalt_ewidencjonowany":
@@ -874,6 +912,17 @@ class MonthlySettlement(models.Model):
         default=0.00,
         verbose_name="Opłacona składka na Fundusz Pracy",
     )
+    STATUS_CHOICES = [
+        ("draft", "Szkic (do zatwierdzenia)"),
+        ("approved", "Zatwierdzone"),
+    ]
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default="approved", verbose_name="Status"
+    )
+    details = models.JSONField(
+        null=True, blank=True, verbose_name="Szczegóły wyliczenia"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="Zatwierdzono")
 
     class Meta:
         verbose_name = "Rozliczenie miesięczne"
