@@ -10,6 +10,7 @@ from django.utils import timezone
 from ksef2 import Client, Environment, FormSchema
 
 from ksiegowosc.models import CompanyInfo, Invoice
+from .ksef2_import import ENVIRONMENT_MAP
 from .xml_generator import generate_invoice_xml
 
 logger = logging.getLogger(__name__)
@@ -38,12 +39,9 @@ class KsefService:
     
     def _create_client(self) -> Client:
         """Tworzy klienta ksef2 dla odpowiedniego środowiska."""
-        env_map = {
-            'test': Environment.TEST,
-            'demo': Environment.DEMO,
-            'prod': Environment.PROD,
-        }
-        env = env_map.get(self.company_info.ksef_environment, Environment.PROD)
+        # Ta sama mapa co przy imporcie — klucze zgodne z choices CompanyInfo.ksef_environment
+        # (ksef2 ma Environment.PRODUCTION, nie PROD). Nieznana wartość -> TEST, nigdy produkcja.
+        env = ENVIRONMENT_MAP.get(self.company_info.ksef_environment or "test", Environment.TEST)
         return Client(env)
     
     def _normalize_nip(self, nip: str) -> str:
