@@ -1,6 +1,7 @@
 # ksiegowosc/admin.py
 
 import json
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -15,6 +16,7 @@ from django.template.loader import render_to_string
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 # Import usług KSeF
 from ksef.services import send_invoice_to_ksef
@@ -23,6 +25,8 @@ from weasyprint import HTML
 from .models import (
     CompanyInfo,
     Contractor,
+    DutyRate,
+    DutyShift,
     ExpenseCategory,
     Invoice,
     InvoiceItem,
@@ -33,6 +37,16 @@ from .models import (
     YearlySettlement,
     ZUSRates,
 )
+
+DNI_TYGODNIA_PL = [
+    "poniedziałek",
+    "wtorek",
+    "środa",
+    "czwartek",
+    "piątek",
+    "sobota",
+    "niedziela",
+]
 
 # ==== CUSTOM FILTER DLA STATUSU PŁATNOŚCI ====
 
@@ -200,10 +214,6 @@ class CompanyInfoAdmin(admin.ModelAdmin):
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
-    class Media:
-        css = {"all": ("admin/css/company_form.css",)}
-        js = ("admin/js/company_form.js",)
-
 
 # ==== CONTRACTOR ADMIN ====
 
@@ -340,6 +350,7 @@ class PaymentInline(admin.TabularInline):
 
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
+    change_list_template = "admin/ksiegowosc/invoice/change_list.html"
     inlines = [InvoiceItemInline, PaymentInline]
     list_display = (
         "invoice_number",
@@ -348,6 +359,7 @@ class InvoiceAdmin(admin.ModelAdmin):
         "total_amount",
         "payment_status_colored",
         "ksef_status_display",
+        "duty_annex_link",
         "user",
     )
     list_filter = (
@@ -402,7 +414,7 @@ class InvoiceAdmin(admin.ModelAdmin):
     def balance_due_colored(self, obj):
         balance = obj.balance_due
         if balance <= 0:
-            return format_html(
+            return mark_safe(
                 '<span style="color: green; font-weight: bold;">0.00 PLN</span>'
             )
         elif obj.is_overdue:
@@ -413,6 +425,14 @@ class InvoiceAdmin(admin.ModelAdmin):
             return format_html('<span style="color: orange;">{} PLN</span>', balance)
 
     balance_due_colored.short_description = "Do zapłaty"
+
+    def duty_annex_link(self, obj):
+        if not obj.duty_shifts.exists():
+            return "—"
+        url = reverse("admin:ksiegowosc_dutyshift_annex_pdf") + f"?invoice_id={obj.id}"
+        return format_html('<a href="{}" target="_blank">załącznik (dyżury)</a>', url)
+
+    duty_annex_link.short_description = "Załącznik do faktury"
 
     @admin.action(description="Resetuj status KSeF dla zaznaczonych")
     def reset_ksef_status_action(self, request, queryset):
@@ -426,9 +446,51 @@ class InvoiceAdmin(admin.ModelAdmin):
         )
         self.message_user(request, f"Zresetowano status KSeF dla {count} faktur.")
 
+    def import_ksef_sales_view(self, request):
+        from ksef.ksef2_import import import_sales_invoices_from_ksef
+
+        try:
+            company_info = CompanyInfo.objects.get(user=request.user)
+        except CompanyInfo.DoesNotExist:
+            messages.error(request, "Uzupełnij najpierw dane firmy (CompanyInfo) i token KSeF.")
+            return redirect("admin:ksiegowosc_invoice_changelist")
+
+        if request.method == "POST":
+            try:
+                days = int(request.POST.get("days", 30))
+            except (TypeError, ValueError):
+                days = 30
+
+            result = import_sales_invoices_from_ksef(company_info, days=days)
+
+            if result.created:
+                messages.success(request, f"Utworzono {result.created} nowych faktur na podstawie KSeF.")
+            if result.synced:
+                messages.info(request, f"Zsynchronizowano status KSeF na {result.synced} istniejących fakturach.")
+            if result.errors:
+                for err in result.errors[:10]:
+                    messages.warning(request, err)
+                if len(result.errors) > 10:
+                    messages.warning(request, f"...i {len(result.errors) - 10} więcej błędów.")
+            if not result.created and not result.synced and not result.errors:
+                messages.info(request, "Brak faktur do zaimportowania/zsynchronizowania w podanym okresie.")
+
+            return redirect("admin:ksiegowosc_invoice_changelist")
+
+        return render(
+            request,
+            "admin/ksiegowosc/invoice/import_ksef.html",
+            {"opts": self.model._meta, "title": "Import/synchronizacja faktur z KSeF", "company_info": company_info},
+        )
+
     def get_urls(self):
         urls = super().get_urls()
         my_urls = [
+            path(
+                "import-ksef-sprzedaz/",
+                self.admin_site.admin_view(self.import_ksef_sales_view),
+                name="ksiegowosc_invoice_import_ksef",
+            ),
             path(
                 "<int:object_id>/change/generate-pdf/",
                 self.admin_site.admin_view(self.generate_pdf_view),
@@ -1189,18 +1251,38 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
             if "JPK" not in xml_content:
                 raise ValueError("Plik nie wygląda na plik JPK.")
             root = ET.fromstring(xml_content)
-            namespaces = {"tns": "http://jpk.mf.gov.pl/wzor/2022/02/01/02011/"}
+            # Namespace wykrywany dynamicznie z pliku, zamiast na sztywno —
+            # MF zmieniało schemat JPK_EWP (wariant 3: .../2022/02/01/02011/,
+            # wariant 4: .../2024/10/30/10301/ i możliwe kolejne w przyszłości).
+            if root.tag.startswith("{"):
+                ns_uri = root.tag[1:root.tag.index("}")]
+            else:
+                ns_uri = "http://jpk.mf.gov.pl/wzor/2022/02/01/02011/"
+            namespaces = {"tns": ns_uri}
             ewp_wiersze = root.findall("tns:EWPWiersz", namespaces)
             if not ewp_wiersze:
                 raise ValueError("Nie znaleziono żadnych wpisów w pliku JPK_EWP.")
+
+            def _row_revenue(wiersz):
+                """Kwota przychodu z wiersza — układ kolumn różni się między
+                wariantami JPK_EWP. Wariant 4 (2024+): kwota w K_8, bez K_11.
+                Wariant 3 (starszy): suma K_7 + K_11."""
+                k8 = wiersz.find("tns:K_8", namespaces)
+                k11 = wiersz.find("tns:K_11", namespaces)
+                if k11 is None and k8 is not None:
+                    # Wariant 4 — jedna kolumna z kwotą.
+                    return Decimal(k8.text or "0")
+                k7 = wiersz.find("tns:K_7", namespaces)
+                k7_val = Decimal(k7.text) if k7 is not None and k7.text else Decimal("0")
+                k11_val = Decimal(k11.text) if k11 is not None and k11.text else Decimal("0")
+                return k7_val + k11_val
+
             monthly_revenues = {}
             for wiersz in ewp_wiersze:
                 date_str = wiersz.find("tns:K_2", namespaces).text
                 date = datetime.strptime(date_str, "%Y-%m-%d").date()
                 year_month = (date.year, date.month)
-                revenue = Decimal(wiersz.find("tns:K_7", namespaces).text) + Decimal(
-                    wiersz.find("tns:K_11", namespaces).text
-                )
+                revenue = _row_revenue(wiersz)
                 if year_month not in monthly_revenues:
                     monthly_revenues[year_month] = Decimal("0.00")
                 monthly_revenues[year_month] += revenue
@@ -1899,6 +1981,7 @@ class ZUSRatesAdmin(admin.ModelAdmin):
 
 @admin.register(PurchaseInvoice)
 class PurchaseInvoiceAdmin(admin.ModelAdmin):
+    change_list_template = "admin/ksiegowosc/purchaseinvoice/change_list.html"
     list_display = (
         "invoice_number",
         "supplier",
@@ -1939,8 +2022,53 @@ class PurchaseInvoiceAdmin(admin.ModelAdmin):
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path(
+                "import-ksef/",
+                self.admin_site.admin_view(self.import_ksef_view),
+                name="ksiegowosc_purchaseinvoice_import_ksef",
+            ),
+        ]
+        return my_urls + urls
 
-# ==== EXPENSE CATEGORY ADMIN ====
+    def import_ksef_view(self, request):
+        from ksef.ksef2_import import import_purchase_invoices_from_ksef
+
+        try:
+            company_info = CompanyInfo.objects.get(user=request.user)
+        except CompanyInfo.DoesNotExist:
+            messages.error(request, "Uzupełnij najpierw dane firmy (CompanyInfo) i token KSeF.")
+            return redirect("admin:ksiegowosc_purchaseinvoice_changelist")
+
+        if request.method == "POST":
+            try:
+                days = int(request.POST.get("days", 30))
+            except (TypeError, ValueError):
+                days = 30
+
+            result = import_purchase_invoices_from_ksef(company_info, days=days)
+
+            if result.created:
+                messages.success(request, f"Zaimportowano {result.created} nowych faktur zakupowych z KSeF.")
+            if result.skipped_existing:
+                messages.info(request, f"Pominięto {result.skipped_existing} faktur już istniejących w bazie.")
+            if result.errors:
+                for err in result.errors[:10]:
+                    messages.warning(request, err)
+                if len(result.errors) > 10:
+                    messages.warning(request, f"...i {len(result.errors) - 10} więcej błędów.")
+            if not result.created and not result.errors:
+                messages.info(request, "Brak nowych faktur do zaimportowania w podanym okresie.")
+
+            return redirect("admin:ksiegowosc_purchaseinvoice_changelist")
+
+        return render(
+            request,
+            "admin/ksiegowosc/purchaseinvoice/import_ksef.html",
+            {"opts": self.model._meta, "title": "Import faktur zakupowych z KSeF", "company_info": company_info},
+        )
 
 
 @admin.register(ExpenseCategory)
@@ -1960,3 +2088,364 @@ class ExpenseCategoryAdmin(admin.ModelAdmin):
         if not hasattr(obj, "user") or not obj.user:
             obj.user = request.user
         super().save_model(request, obj, form, change)
+
+# ==== DYŻURY MEDYCZNE (ordynacja dzienna) ====
+
+
+@admin.register(DutyRate)
+class DutyRateAdmin(admin.ModelAdmin):
+    list_display = (
+        "contractor",
+        "valid_from",
+        "rate_weekday_towarzyszacy",
+        "rate_weekday_samodzielny",
+        "rate_weekend_towarzyszacy",
+        "rate_weekend_samodzielny",
+        "user",
+    )
+    list_filter = ("contractor", "user")
+    exclude = ("user",)
+    ordering = ("-valid_from",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "contractor" and not request.user.is_superuser:
+            kwargs["queryset"] = Contractor.objects.filter(user=request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, "user") or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
+
+
+class BilledFilter(admin.SimpleListFilter):
+    title = "rozliczenie"
+    parameter_name = "billed"
+
+    def lookups(self, request, model_admin):
+        return (("no", "Nierozliczone"), ("yes", "Rozliczone (na fakturze)"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "no":
+            return queryset.filter(invoice__isnull=True)
+        if self.value() == "yes":
+            return queryset.filter(invoice__isnull=False)
+        return queryset
+
+
+@admin.register(DutyShift)
+class DutyShiftAdmin(admin.ModelAdmin):
+    change_list_template = "admin/ksiegowosc/dutyshift/change_list.html"
+    list_display = (
+        "date",
+        "day_name",
+        "contractor",
+        "shift_type",
+        "weekend_or_holiday_badge",
+        "hours",
+        "department",
+        "value_preview",
+        "invoice",
+    )
+    list_filter = ("contractor", "shift_type", "is_holiday", BilledFilter, "user")
+    search_fields = ("department", "notes")
+    date_hierarchy = "date"
+    exclude = ("user", "invoice", "rate_applied")
+    actions = ["generate_invoice_action", "download_annex_pdf_action"]
+
+    class Media:
+        css = {"all": ("admin/css/custom_admin.css",)}
+
+    def day_name(self, obj):
+        return DNI_TYGODNIA_PL[obj.date.weekday()]
+
+    day_name.short_description = "Dzień tygodnia"
+
+    def weekend_or_holiday_badge(self, obj):
+        if obj.is_weekend_or_holiday:
+            return mark_safe('<span style="color: #b30000; font-weight: bold;">weekend/święto</span>')
+        return mark_safe('<span style="color: #555;">dzień roboczy</span>')
+
+    weekend_or_holiday_badge.short_description = "Typ dnia"
+
+    def value_preview(self, obj):
+        val = obj.value
+        if val is None:
+            return mark_safe('<span style="color: orange;">brak stawki</span>')
+        return f"{val} PLN"
+
+    value_preview.short_description = "Wartość"
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "contractor" and not request.user.is_superuser:
+            kwargs["queryset"] = Contractor.objects.filter(user=request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not hasattr(obj, "user") or not obj.user:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path(
+                "import-grafiku/",
+                self.admin_site.admin_view(self.import_wklej_view),
+                name="ksiegowosc_dutyshift_import",
+            ),
+            path(
+                "zalacznik-pdf/",
+                self.admin_site.admin_view(self.zalacznik_pdf_view),
+                name="ksiegowosc_dutyshift_annex_pdf",
+            ),
+        ]
+        return my_urls + urls
+
+    def import_wklej_view(self, request):
+        """Wklejenie grafiku dyżurów jako tekstu (np. skopiowanego z tabeli w rozmowie
+        z Claude) i utworzenie z niego wielu DutyShift naraz.
+
+        Oczekiwany format — jedna linia na dyżur, wartości oddzielone tabulatorem
+        lub średnikiem:
+            DATA;OD;DO;RODZAJ;OPK;UWAGI
+            04.07.2026;20:00;8:00;samodzielny;;
+            07.07.2026;18:00;8:00;towarzyszacy;500-00-16;
+
+        RODZAJ: "samodzielny" / "sam" / "s" -> samodzielny, wszystko inne -> towarzyszący.
+        Puste OPK i UWAGI można pominąć.
+        """
+        contractors = Contractor.objects.filter(user=request.user) if not request.user.is_superuser else Contractor.objects.all()
+
+        if request.method == "POST":
+            contractor_id = request.POST.get("contractor")
+            raw_text = request.POST.get("raw_text", "")
+            mark_holiday_dates = {
+                d.strip() for d in request.POST.get("holiday_dates", "").split(",") if d.strip()
+            }
+            try:
+                contractor = contractors.get(pk=contractor_id)
+            except (Contractor.DoesNotExist, ValueError, TypeError):
+                messages.error(request, "Wybierz prawidłowego kontrahenta.")
+                return redirect("admin:ksiegowosc_dutyshift_import")
+
+            created, errors = 0, []
+            for line_no, line in enumerate(raw_text.splitlines(), start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                parts = [p.strip() for p in re.split(r"[;\t]", line)]
+                if len(parts) < 3:
+                    errors.append(f"Linia {line_no}: za mało kolumn ('{line}')")
+                    continue
+                date_str, start_str, end_str = parts[0], parts[1], parts[2]
+                rodzaj_str = parts[3].lower() if len(parts) > 3 and parts[3] else "towarzyszacy"
+                opk = parts[4] if len(parts) > 4 else ""
+                uwagi = parts[5] if len(parts) > 5 else ""
+
+                shift_type = (
+                    "samodzielny"
+                    if rodzaj_str.startswith("sam") or rodzaj_str in ("s",)
+                    else "towarzyszacy"
+                )
+
+                parsed_date = None
+                for fmt in ("%d.%m.%Y", "%d.%m.%y", "%Y-%m-%d"):
+                    try:
+                        parsed_date = datetime.strptime(date_str, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                if parsed_date is None:
+                    errors.append(f"Linia {line_no}: nierozpoznana data '{date_str}'")
+                    continue
+
+                parsed_start = parsed_end = None
+                for fmt in ("%H:%M", "%H"):
+                    try:
+                        parsed_start = datetime.strptime(start_str, fmt).time()
+                        break
+                    except ValueError:
+                        continue
+                for fmt in ("%H:%M", "%H"):
+                    try:
+                        parsed_end = datetime.strptime(end_str, fmt).time()
+                        break
+                    except ValueError:
+                        continue
+                if parsed_start is None or parsed_end is None:
+                    errors.append(f"Linia {line_no}: nierozpoznane godziny '{start_str}'-'{end_str}'")
+                    continue
+
+                DutyShift.objects.create(
+                    user=request.user,
+                    contractor=contractor,
+                    date=parsed_date,
+                    start_time=parsed_start,
+                    end_time=parsed_end,
+                    shift_type=shift_type,
+                    is_holiday=date_str in mark_holiday_dates or parsed_date.isoformat() in mark_holiday_dates,
+                    department=opk,
+                    notes=uwagi,
+                )
+                created += 1
+
+            if created:
+                messages.success(request, f"Zaimportowano {created} dyżurów.")
+            for err in errors:
+                messages.warning(request, err)
+            return redirect("admin:ksiegowosc_dutyshift_changelist")
+
+        return render(
+            request,
+            "admin/ksiegowosc/dutyshift/import.html",
+            {"contractors": contractors, "opts": self.model._meta, "title": "Import grafiku dyżurów"},
+        )
+
+    @admin.action(description="Wystaw fakturę z zaznaczonych dyżurów")
+    def generate_invoice_action(self, request, queryset):
+        queryset = queryset.filter(invoice__isnull=True)
+        if not queryset.exists():
+            messages.warning(request, "Zaznaczone dyżury są już rozliczone lub nic nie zaznaczono.")
+            return
+
+        contractor_ids = set(queryset.values_list("contractor_id", flat=True))
+        if len(contractor_ids) > 1:
+            messages.error(request, "Zaznaczone dyżury dotyczą więcej niż jednego kontrahenta — wystaw je osobno.")
+            return
+        contractor = Contractor.objects.get(pk=contractor_ids.pop())
+
+        missing_rate = []
+        groups = {}  # (shift_type, is_weekend_or_holiday) -> {"hours": Decimal, "rate": Decimal}
+        for shift in queryset:
+            rate_obj = DutyRate.rate_object_for_date(request.user, contractor, shift.date)
+            if not rate_obj:
+                missing_rate.append(shift)
+                continue
+            rate = rate_obj.rate_for(
+                is_weekend_or_holiday=shift.is_weekend_or_holiday, shift_type=shift.shift_type
+            )
+            key = (shift.shift_type, shift.is_weekend_or_holiday)
+            group = groups.setdefault(key, {"hours": Decimal("0"), "rate": rate, "shifts": []})
+            group["hours"] += shift.hours
+            group["shifts"].append(shift)
+
+        if missing_rate:
+            dates = ", ".join(s.date.isoformat() for s in missing_rate)
+            messages.error(
+                request,
+                f"Brak zdefiniowanej stawki (DutyRate) dla kontrahenta {contractor} na dzień(-i): {dates}. "
+                "Dodaj stawkę i spróbuj ponownie.",
+            )
+            return
+
+        last_invoice = Invoice.objects.filter(user=request.user).order_by("-id").first()
+        next_number = f"DYZ/{timezone.now():%Y/%m}/{(last_invoice.id if last_invoice else 0) + 1}"
+
+        with transaction.atomic():
+            invoice = Invoice.objects.create(
+                user=request.user,
+                invoice_number=next_number,
+                contractor=contractor,
+            )
+            labels = {
+                ("samodzielny", False): "Dyżur medyczny samodzielny — dni robocze",
+                ("samodzielny", True): "Dyżur medyczny samodzielny — weekend/święto",
+                ("towarzyszacy", False): "Dyżur medyczny towarzyszący — dni robocze",
+                ("towarzyszacy", True): "Dyżur medyczny towarzyszący — weekend/święto",
+            }
+            for key, group in groups.items():
+                InvoiceItem.objects.create(
+                    user=request.user,
+                    invoice=invoice,
+                    name=labels[key],
+                    quantity=group["hours"],
+                    unit="godz.",
+                    unit_price=group["rate"],
+                    total_price=group["hours"] * group["rate"],
+                )
+                for shift in group["shifts"]:
+                    shift.invoice = invoice
+                    shift.rate_applied = group["rate"]
+                    shift.save(update_fields=["invoice", "rate_applied"])
+            invoice.update_total_amount()
+
+        messages.success(
+            request,
+            f"Wystawiono fakturę {invoice.invoice_number} na {invoice.total_amount} PLN "
+            f"({queryset.count()} dyżurów). Uzupełnij numer faktury i wystaw załącznik PDF.",
+        )
+
+    @admin.action(description="Pobierz załącznik PDF dla zaznaczonych dyżurów")
+    def download_annex_pdf_action(self, request, queryset):
+        ids = ",".join(str(pk) for pk in queryset.values_list("pk", flat=True))
+        url = reverse("admin:ksiegowosc_dutyshift_annex_pdf") + f"?ids={ids}"
+        return redirect(url)
+
+    def zalacznik_pdf_view(self, request):
+        MIESIACE_PL = [
+            "stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca",
+            "lipca", "sierpnia", "września", "października", "listopada", "grudnia",
+        ]
+        invoice_id = request.GET.get("invoice_id")
+        ids_str = request.GET.get("ids")
+        if invoice_id:
+            shifts = DutyShift.objects.filter(invoice_id=invoice_id, user=request.user).order_by("date")
+            invoice = Invoice.objects.filter(pk=invoice_id, user=request.user).first()
+        elif ids_str:
+            ids = ids_str.split(",")
+            shifts = DutyShift.objects.filter(pk__in=ids, user=request.user).order_by("date")
+            invoice = None
+        else:
+            messages.error(request, "Nie wskazano dyżurów do wygenerowania załącznika.")
+            return redirect("admin:ksiegowosc_dutyshift_changelist")
+
+        if not shifts.exists():
+            messages.error(request, "Nie znaleziono dyżurów.")
+            return redirect("admin:ksiegowosc_dutyshift_changelist")
+
+        rows = [
+            {
+                "lp": i,
+                "date": s.date,
+                "day_name": DNI_TYGODNIA_PL[s.date.weekday()],
+                "start_time": s.start_time,
+                "end_time": s.end_time,
+                "hours": s.hours,
+                "department": s.department,
+                "shift_type": s.get_shift_type_display(),
+            }
+            for i, s in enumerate(shifts, start=1)
+        ]
+        total_hours = sum((s.hours for s in shifts), Decimal("0"))
+
+        html_string = render_to_string(
+            "ksiegowosc/dutyshift_annex_pdf_template.html",
+            {
+                "rows": rows,
+                "invoice": invoice,
+                "total_hours": total_hours,
+                "issue_month_pl": (
+                    f"{MIESIACE_PL[invoice.issue_date.month - 1]} {invoice.issue_date.year}"
+                    if invoice
+                    else ""
+                ),
+            },
+        )
+        pdf = HTML(string=html_string).write_pdf()
+        response = HttpResponse(pdf, content_type="application/pdf")
+        suffix = invoice.invoice_number.replace("/", "_") if invoice else timezone.now().strftime("%Y%m%d")
+        response["Content-Disposition"] = f'attachment; filename="zalacznik-dyzury-{suffix}.pdf"'
+        return response

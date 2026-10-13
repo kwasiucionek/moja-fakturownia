@@ -224,7 +224,7 @@ class KsefClient:
         })
 
         # Krok 3: Polling statusu uwierzytelnienia
-        status_url = f"{self.base_url}/auth/status/{auth_reference}"
+        status_url = f"{self.base_url}/auth/{auth_reference}"
         
         logger.info("[3/4] Oczekiwanie na zatwierdzenie w aplikacji...")
         max_attempts = 60

@@ -1,0 +1,67 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}Import/synchronizacja faktur z KSeF{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:ksiegowosc_invoice_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; Import z KSeF
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="module filtered">
+        <h1>Import/synchronizacja faktur z KSeF</h1>
+
+        <div class="description">
+            <p>
+                Pobiera faktury, na których <strong>{{ company_info.company_name }}</strong>
+                (NIP {{ company_info.tax_id }}) występuje jako <strong>sprzedawca</strong>
+                (wystawca), ze środowiska <strong>{{ company_info.get_ksef_environment_display }}</strong>.
+            </p>
+            <p>
+                <strong>Faktury już istniejące</strong> w bazie (dopasowane po numerze faktury) —
+                tylko synchronizujemy status i numer KSeF, nie ruszamy kwot ani pozycji.
+            </p>
+            <p>
+                <strong>Faktury, których nie ma w bazie</strong> (np. wystawione poza tą appką) —
+                tworzymy nowy rekord z jedną zbiorczą pozycją na kwotę brutto z KSeF. Sprawdź
+                i rozbij na szczegółowe pozycje ręcznie, jeśli potrzeba.
+            </p>
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+            <fieldset class="module aligned">
+                <div class="form-row">
+                    <div>
+                        <label for="id_days">Za ile ostatnich dni pobrać:</label>
+                        <input type="number" name="days" id="id_days" value="30" min="1" max="365">
+                    </div>
+                </div>
+            </fieldset>
+            <div class="submit-row">
+                <input type="submit" value="Importuj / synchronizuj" class="default">
+                <a href="{% url 'admin:ksiegowosc_invoice_changelist' %}" class="button cancel-link">Anuluj</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.description {
+    background: #e8f5e8;
+    border: 1px solid #d4edda;
+    border-radius: 0.25rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    max-width: 700px;
+}
+.cancel-link { margin-left: 0.5rem; color: #666; text-decoration: none; }
+.cancel-link:hover { text-decoration: underline; }
+</style>
+{% endblock %}

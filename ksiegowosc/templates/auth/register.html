@@ -3,10 +3,13 @@
 {% block content %}
 <!-- Social Login Section -->
 <div class="social-login mb-4">
-    <a href="{% url 'social:begin' 'google-oauth2' %}" class="social-btn btn-google">
-        <i class="fab fa-google me-2"></i>
-        Zarejestruj się przez Google
-    </a>
+    <form method="post" action="{% url 'social:begin' 'google-oauth2' %}" class="social-login-form">
+        {% csrf_token %}
+        <button type="submit" class="social-btn btn-google">
+            <i class="fab fa-google me-2"></i>
+            Zarejestruj się przez Google
+        </button>
+    </form>
 </div>
 
 <div class="divider">

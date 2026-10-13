@@ -1,67 +1,54 @@
-alabaster==1.0.0
-asgiref==3.10.0
-babel==2.17.0
-beautifulsoup4==4.14.2
-bs4==0.0.2
-certifi==2025.10.5
-cffi==2.0.0
-charset-normalizer==3.4.4
-coverage==7.11.0
-cryptography==43.0.3
+# Pełna aktualizacja do najnowszych stabilnych wersji (Django 6.1, Jazzmin 3.0.5).
+# Świeże rozwiązanie zależności — pip sam dobrał wzajemnie kompatybilne wersje
+# na podstawie realnych importów w kodzie. Zweryfikowane: `pip install` bez
+# konfliktów + `manage.py check` + realny render dashboardu przez Django test
+# client (status 200, poprawny sidebar, wykresy, brak starych klas Bootstrap 4).
+#
+# WYMAGAŁO ZMIAN W KODZIE (patrz osobno przesłane pliki):
+#   - ksiegowosc/admin.py: 4x format_html() bez argumentów -> mark_safe()
+#     (Django 6.0 usunęło wsparcie dla format_html() bez podstawień)
+#   - ksiegowosc/templates/admin/enhanced_dashboard.html: przepisany na
+#     Bootstrap 5 pod nowy layout Jazzmin 3.0.5 (content-wrapper -> content
+#     block bezpośrednio w .row, badge-* -> bg-*, text-right -> text-end,
+#     float-sm-right -> float-sm-end, btn-block -> w-100)
+#   - fakturownia/settings.py + urls.py: usunięty django-health-check
+#     (był martwym kodem — Twój własny widok health_check w urls.py i tak
+#     przesłaniał go w routingu; nowa wersja 4.x miała inną, niekompatybilną
+#     strukturę, więc prościej i bezpieczniej było usunąć zależność całkiem)
+#
+# USUNIĘTO (potwierdzone grepem po repo — zero użyć w kodzie):
+#   ksef-utils, django-health-check, alabaster, babel, docutils,
+#   gherkin-official, imagesize, parse, parse_type, pytest-bdd,
+#   roman-numerals-py, snowballstemmer, Sphinx, sphinx-rtd-theme,
+#   sphinxcontrib-*, pytz, six, Mako, Jinja2
+#
+# psycopg2 zbudowany i przypięty ręcznie (ten sandbox nie ma pg_config,
+# ale Twój serwer buduje go bez problemu). Zostaje na wypadek powrotu
+# do Postgresa, mimo że appka teraz stoi na SQLite.
+
+Django==6.1
+PyJWT==2.13.0
+Pygments==2.20.0
+beautifulsoup4==4.15.0
+cryptography==50.0.0
 defusedxml==0.7.1
-dj-database-url==3.0.1
-Django==5.2.7
+dj-database-url==3.1.2
 django-cors-headers==4.9.0
-django-debug-toolbar==6.0.0
-django-environ==0.12.0
+django-debug-toolbar==7.1.0
+django-environ==0.14.0
 django-extensions==4.1
-django-health-check==3.20.0
-django-jazzmin==3.0.1
-docutils==0.21.2
-gherkin-official==29.0.0
-idna==3.11
-imagesize==1.4.1
-iniconfig==2.3.0
-Jinja2==3.1.6
-ksef-utils==1.4
-lxml==4.9.4
-Mako==1.3.10
-MarkupSafe==3.0.3
-oauthlib==3.3.1
-packaging==25.0
-parse==1.20.2
-parse_type==0.6.6
-pluggy==1.6.0
-psycopg2==2.9.11
-pycparser==2.23
+django-import-export==4.4.1
+django-jazzmin==3.0.5
+ksef2==0.18.1
+lxml==6.1.1
+psycopg2==2.9.12
 pycryptodome==3.23.0
-Pygments==2.19.2
-PyJWT==2.10.1
-pyOpenSSL==24.2.1
-pytest==8.4.2
-pytest-bdd==8.1.0
-pytest-cov==7.0.0
-python3-openid==3.2.0
-pytz==2025.2
-requests==2.32.5
-requests-oauthlib==2.0.0
-roman-numerals-py==3.1.0
-signxml==3.2.1
-six==1.17.0
-snowballstemmer==3.0.1
-social-auth-app-django==5.6.0
-social-auth-core==4.8.1
-soupsieve==2.8
-Sphinx==8.2.3
-sphinx-rtd-theme==3.0.2
-sphinxcontrib-applehelp==2.0.0
-sphinxcontrib-devhelp==2.0.0
-sphinxcontrib-htmlhelp==2.1.0
-sphinxcontrib-jquery==4.1
-sphinxcontrib-jsmath==1.0.1
-sphinxcontrib-qthelp==2.0.0
-sphinxcontrib-serializinghtml==2.0.0
-sqlparse==0.5.3
-typing_extensions==4.15.0
-urllib3==2.5.0
-whitenoise==6.11.0
+pyOpenSSL==26.4.0
+pytest==9.1.1
+pytest-cov==7.1.0
+requests==2.34.2
+signxml==5.1.0
+social-auth-app-django==6.0.1
+tablib==3.10.0
+weasyprint==69.0
+whitenoise==6.12.0

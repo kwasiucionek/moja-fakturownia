@@ -1,7 +1,7 @@
 # ksiegowosc/models.py
 
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import requests
@@ -1389,3 +1389,172 @@ class ExpenseReport(models.Model):
 
     def __str__(self):
         return f"Koszty {self.period_start} - {self.period_end}"
+
+
+# ==== DYŻURY MEDYCZNE (ordynacja dzienna) ====
+
+
+class DutyRate(models.Model):
+    """Stawki godzinowe za dyżury dla danego kontrahenta, obowiązujące od danej daty.
+
+    Pozwala trzymać historię zmian stawek — przy generowaniu faktury bierzemy
+    stawkę obowiązującą na dzień danego dyżuru (najnowszą z valid_from <= data dyżuru).
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    contractor = models.ForeignKey(
+        Contractor,
+        on_delete=models.CASCADE,
+        verbose_name="Kontrahent (szpital/placówka)",
+    )
+    valid_from = models.DateField(verbose_name="Obowiązuje od")
+    rate_weekday_towarzyszacy = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        verbose_name="Stawka godz. — dzień roboczy, towarzyszący",
+    )
+    rate_weekday_samodzielny = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        verbose_name="Stawka godz. — dzień roboczy, samodzielny",
+    )
+    rate_weekend_towarzyszacy = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        verbose_name="Stawka godz. — weekend/święto, towarzyszący",
+    )
+    rate_weekend_samodzielny = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        verbose_name="Stawka godz. — weekend/święto, samodzielny",
+    )
+
+    class Meta:
+        verbose_name = "Stawka za dyżur"
+        verbose_name_plural = "Stawki za dyżury"
+        ordering = ["-valid_from"]
+        unique_together = ("user", "contractor", "valid_from")
+
+    def __str__(self):
+        return f"Stawki {self.contractor.name} od {self.valid_from}"
+
+    def rate_for(self, *, is_weekend_or_holiday, shift_type):
+        if shift_type == "samodzielny":
+            return (
+                self.rate_weekend_samodzielny
+                if is_weekend_or_holiday
+                else self.rate_weekday_samodzielny
+            )
+        return (
+            self.rate_weekend_towarzyszacy
+            if is_weekend_or_holiday
+            else self.rate_weekday_towarzyszacy
+        )
+
+    @classmethod
+    def rate_object_for_date(cls, user, contractor, date):
+        return (
+            cls.objects.filter(user=user, contractor=contractor, valid_from__lte=date)
+            .order_by("-valid_from")
+            .first()
+        )
+
+
+class DutyShift(models.Model):
+    """Pojedynczy dyżur medyczny (ordynacja dzienna) z papierowego grafiku."""
+
+    SHIFT_TYPE_CHOICES = [
+        ("samodzielny", "Samodzielny"),
+        ("towarzyszacy", "Towarzyszący"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    contractor = models.ForeignKey(
+        Contractor,
+        on_delete=models.PROTECT,
+        verbose_name="Kontrahent (szpital/placówka)",
+    )
+    date = models.DateField(verbose_name="Data dyżuru")
+    start_time = models.TimeField(verbose_name="Od godziny")
+    end_time = models.TimeField(verbose_name="Do godziny")
+    hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        blank=True,
+        verbose_name="Suma godzin",
+        help_text="Liczone automatycznie z Od/Do (dyżur przechodzący przez północ liczony poprawnie). Można nadpisać ręcznie.",
+    )
+    shift_type = models.CharField(
+        max_length=20,
+        choices=SHIFT_TYPE_CHOICES,
+        default="towarzyszacy",
+        verbose_name="Rodzaj dyżuru",
+    )
+    is_holiday = models.BooleanField(
+        default=False,
+        verbose_name="Święto",
+        help_text="Zaznacz dla świąt wypadających w dzień roboczy — dyżur zostanie rozliczony jak weekendowy.",
+    )
+    department = models.CharField(
+        max_length=100, blank=True, default="", verbose_name="Oddział (OPK)"
+    )
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="duty_shifts",
+        verbose_name="Rozliczono na fakturze",
+    )
+    rate_applied = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Zastosowana stawka",
+        help_text="Uzupełniane automatycznie przy wystawianiu faktury — wartość historyczna, nie zmienia się przy późniejszej zmianie cennika.",
+    )
+    notes = models.CharField(max_length=255, blank=True, default="", verbose_name="Uwagi")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Dyżur"
+        verbose_name_plural = "Dyżury"
+        ordering = ["date", "start_time"]
+
+    def __str__(self):
+        return f"{self.date} ({self.get_shift_type_display()}) {self.hours} h"
+
+    @property
+    def is_weekend_or_holiday(self):
+        # Python: Monday=0 ... Saturday=5, Sunday=6
+        return self.date.weekday() >= 5 or self.is_holiday
+
+    def calc_hours(self):
+        start_dt = datetime.combine(self.date, self.start_time)
+        end_dt = datetime.combine(self.date, self.end_time)
+        if end_dt <= start_dt:
+            end_dt += timedelta(days=1)
+        seconds = (end_dt - start_dt).total_seconds()
+        return Decimal(seconds / 3600).quantize(Decimal("0.01"))
+
+    def save(self, *args, **kwargs):
+        if not self.hours:
+            self.hours = self.calc_hours()
+        super().save(*args, **kwargs)
+
+    @property
+    def value(self):
+        """Wartość dyżuru — po wystawieniu faktury liczona z zamrożonej stawki,
+        wcześniej z aktualnego cennika (podgląd)."""
+        rate = self.rate_applied
+        if rate is None:
+            rate_obj = DutyRate.rate_object_for_date(self.user, self.contractor, self.date)
+            if rate_obj:
+                rate = rate_obj.rate_for(
+                    is_weekend_or_holiday=self.is_weekend_or_holiday,
+                    shift_type=self.shift_type,
+                )
+        if rate is None:
+            return None
+        return (Decimal(rate) * self.hours).quantize(Decimal("0.01"))

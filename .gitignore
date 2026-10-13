@@ -1,4 +1,18 @@
 staticfiles/
 venv/
 .env
+env
 __pycache__
+media/
+
+# Baza danych (nigdy nie wersjonować — nadpisanie = utrata danych)
+db.sqlite3
+*.sqlite3
+
+# Logi runtime
+logs/
+*.log
+
+# Dane księgowe i kopie zapasowe (prawdziwe faktury, NIP-y kontrahentów)
+JPK_*.xml
+backup_*.tar.gz

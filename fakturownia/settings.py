@@ -83,10 +83,6 @@ INSTALLED_APPS = [
     *(["debug_toolbar"] if DEBUG else []),
     "ksiegowosc",
     "ksef",
-    "health_check",
-    "health_check.db",
-    "health_check.cache",
-    "health_check.storage",
 ]
 
 MIDDLEWARE = [
@@ -208,7 +204,14 @@ USE_TZ = True
 # =============================================================================
 STATIC_URL = "/static/"
 STATIC_ROOT = env("STATIC_ROOT", default=str(BASE_DIR / "staticfiles"))
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "fakturownia.storage.LenientManifestStaticFilesStorage",
+    },
+}
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / "media"))
@@ -250,7 +253,7 @@ LOGGING = {
         "file": {
             "level": "DEBUG",
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": "/home/fakturownia/app/logs/django.log",
+            "filename": env("DJANGO_LOG_FILE", default=str(BASE_DIR / "logs" / "django.log")),
             "maxBytes": 1024 * 1024 * 10,  # 10 MB
             "backupCount": 5,
             "formatter": "verbose",
@@ -258,7 +261,7 @@ LOGGING = {
         "ksef_file": {
             "level": "DEBUG",
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": "/home/fakturownia/app/logs/ksef.log",
+            "filename": env("KSEF_LOG_FILE", default=str(BASE_DIR / "logs" / "ksef.log")),
             "maxBytes": 1024 * 1024 * 10,  # 10 MB
             "backupCount": 5,
             "formatter": "verbose",

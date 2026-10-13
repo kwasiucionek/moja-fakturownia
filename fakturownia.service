@@ -1,0 +1,26 @@
+[Unit]
+Description=Fakturownia Django Application
+After=network.target
+
+[Service]
+User=fakturownia
+Group=www-data
+WorkingDirectory=/cytrus/fakturownia
+EnvironmentFile=/cytrus/fakturownia/.env
+
+ExecStart=/cytrus/fakturownia/venv/bin/gunicorn \
+    --workers 3 \
+    --timeout 120 \
+    --forwarded-allow-ips="*" \
+    --bind 127.0.0.1:8500 \
+    --access-logfile /cytrus/fakturownia/logs/gunicorn-access.log \
+    --error-logfile /cytrus/fakturownia/logs/gunicorn-error.log \
+    --log-level debug \
+    --capture-output \
+    fakturownia.wsgi:application
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

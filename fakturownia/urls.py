@@ -136,8 +136,6 @@ urlpatterns = [
     path("live/", live_check, name="live_check"),
     # SEO
     path("robots.txt", robots_txt, name="robots_txt"),
-    # Health check apps (jeśli zainstalowane)
-    path("health/", include("health_check.urls")),
     # Przekierowanie głównej strony na logowanie
     path("", RedirectView.as_view(url="/auth/login/", permanent=False)),
     # Social auth
