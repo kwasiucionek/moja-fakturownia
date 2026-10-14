@@ -1,0 +1,9 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+        <a href="uruchom-zamkniecie/" class="btn btn-success">
+            <i class="fas fa-play"></i>
+            Uruchom zamknięcie miesiąca
+        </a>
+    {{ block.super }}
+{% endblock %}

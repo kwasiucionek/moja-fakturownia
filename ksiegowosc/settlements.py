@@ -119,6 +119,45 @@ def revenue_between(
     )
 
 
+REVENUE_SOURCE_EWP = "ewidencja przychodów (JPK_EWP)"
+REVENUE_SOURCE_INVOICES = "faktury"
+PAID_STATUSES = ("draft", "approved")
+
+
+def month_revenue(
+    user, year: int, month: int, default_rate: Decimal, record=None
+) -> tuple[RevenueSummary, RevenueSummary, str]:
+    """Przychód miesiąca do opodatkowania i przychód wg faktur (do porównania).
+
+    Na ryczałcie podstawą jest ewidencja przychodów — jeśli dla miesiąca zaimportowano
+    JPK_EWP, liczy się kwota z ewidencji (z domyślną stawką firmy); w przeciwnym razie
+    przychód wynika z faktur.
+    """
+    start, end = month_range(year, month)
+    from_invoices = revenue_between(user, start, end, default_rate)
+    if record is not None and record.revenue_from_ewp:
+        amount = D(record.total_revenue)
+        by_rate = {norm_rate(default_rate): amount} if amount else {}
+        ewp = RevenueSummary(
+            by_rate=by_rate,
+            invoice_count=from_invoices.invoice_count,
+            by_contractor=from_invoices.by_contractor,
+        )
+        return ewp, from_invoices, REVENUE_SOURCE_EWP
+    return from_invoices, from_invoices, REVENUE_SOURCE_INVOICES
+
+
+def year_revenue_total(user, year: int, default_rate: Decimal) -> Decimal:
+    saved = {s.month: s for s in MonthlySettlement.objects.filter(user=user, year=year)}
+    return sum(
+        (
+            month_revenue(user, year, m, default_rate, saved.get(m))[0].total
+            for m in range(1, 13)
+        ),
+        ZERO,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Miesiąc po miesiącu
 # ---------------------------------------------------------------------------
@@ -146,11 +185,9 @@ def _previous_december_dues(
     prev = year - 1
     try:
         social = social_contributions(prev, profile)
-        rev = revenue_between(
-            user, date(prev, 1, 1), date(prev, 12, 31), profile.default_lump_sum_rate
-        )
+        revenue = year_revenue_total(user, prev, profile.default_lump_sum_rate)
         health = _health_due(
-            prev, profile, max(ZERO, rev.total - social.social_total * 12)
+            prev, profile, max(ZERO, revenue - social.social_total * 12)
         )["skladka"]
         return social.social_total, health, notes
     except MissingYearParams:
@@ -165,8 +202,9 @@ def year_breakdown(
 ) -> dict:
     """Wylicza miesiące od stycznia do `through_month` z przenoszeniem odliczeń.
 
-    Kwoty zapłacone w danym miesiącu bierze z zapisanego rozliczenia miesięcznego; gdy go
-    nie ma, przyjmuje, że w miesiącu zapłacono składki należne za miesiąc poprzedni.
+    Kwoty zapłacone w danym miesiącu bierze z zapisanego rozliczenia (szkic lub
+    zatwierdzone); gdy go nie ma albo pochodzi z importu JPK_EWP (sam przychód), przyjmuje,
+    że w miesiącu zapłacono składki należne za miesiąc poprzedni.
     `overrides` = {miesiąc: {"health_paid": D, "social_paid": D}} nadpisuje te kwoty.
     """
     company = company_for(user)
@@ -184,23 +222,34 @@ def year_breakdown(
     )
 
     for m in range(1, through_month + 1):
-        start, end = month_range(year, m)
-        revenue = revenue_between(user, start, end, profile.default_lump_sum_rate)
-        month_notes = []
+        record = saved.get(m)
+        revenue, from_invoices, revenue_source = month_revenue(
+            user, year, m, profile.default_lump_sum_rate, record
+        )
+        month_notes = [f"przychód: {revenue_source}"]
+        if (
+            revenue_source == REVENUE_SOURCE_EWP
+            and from_invoices.total != revenue.total
+        ):
+            month_notes.append(
+                f"przychód w ewidencji {revenue.total} zł różni się od faktur "
+                f"{from_invoices.total} zł"
+            )
 
         override = overrides.get(m, {})
-        record = saved.get(m)
         if "health_paid" in override or "social_paid" in override:
             health_paid = D(override.get("health_paid", prev_health_due))
             social_paid = D(override.get("social_paid", prev_social_due))
             source = "podane"
-        elif record is not None:
+        elif record is not None and record.status in PAID_STATUSES:
             health_paid = D(record.health_insurance_paid)
             social_paid = D(record.social_insurance_paid)
             source = f"z zapisanego rozliczenia ({record.get_status_display().lower()})"
         else:
             health_paid, social_paid = prev_health_due, prev_social_due
             source = "założenie: zapłacono składki należne za poprzedni miesiąc"
+            if record is not None:
+                source += " (import JPK_EWP nie zawiera wpłat)"
         month_notes.append(f"składki zapłacone w miesiącu — {source}")
 
         cumulative_revenue += revenue.total
@@ -220,6 +269,8 @@ def year_breakdown(
             {
                 "month": m,
                 "revenue": revenue,
+                "revenue_source": revenue_source,
+                "invoices_total": from_invoices.total,
                 "social_due": social,
                 "health_due": health,
                 "health_paid": health_paid,
@@ -260,6 +311,8 @@ def monthly_obligations(
         },
         "przychod": {
             "razem": row["revenue"].total,
+            "zrodlo": row["revenue_source"],
+            "z_faktur": row["invoices_total"],
             "wg_stawek": {f"{k}%": v for k, v in row["revenue"].by_rate.items()},
             "liczba_faktur": row["revenue"].invoice_count,
             "wg_kontrahentow": row["revenue"].by_contractor,
@@ -309,7 +362,7 @@ def annual_settlement(user, year: int) -> dict:
     advances = ZERO
     advance_sources = set()
     for row in months:
-        if row["saved"] is not None:
+        if row["saved"] is not None and row["saved"].status in PAID_STATUSES:
             advances += D(row["saved"].income_tax_payable)
             advance_sources.add("zapisane rozliczenia")
         else:
@@ -334,12 +387,33 @@ def annual_settlement(user, year: int) -> dict:
         if r["saved"] is not None and r["saved"].status == "draft"
     ]
     missing = [r["month"] for r in months if r["saved"] is None]
+    imported = [
+        r["month"]
+        for r in months
+        if r["saved"] is not None and r["saved"].status not in PAID_STATUSES
+    ]
+    mismatched = [
+        f"{r['month']:02d} (ewidencja {r['revenue'].total}, faktury {r['invoices_total']})"
+        for r in months
+        if r["revenue_source"] == REVENUE_SOURCE_EWP
+        and r["revenue"].total != r["invoices_total"]
+    ]
     notes = list(data["notes"])
     if drafts:
         notes.append(f"miesiące ze szkicem (niezatwierdzone): {drafts}")
     if missing:
         notes.append(
             f"miesiące bez zapisanego rozliczenia (przyjęto założenia): {missing}"
+        )
+    if imported:
+        notes.append(
+            "miesiące z importu JPK_EWP bez wpłat i zaliczek (przyjęto wyliczenie): "
+            f"{imported}"
+        )
+    if mismatched:
+        notes.append(
+            "przychód z ewidencji różni się od faktur w miesiącach: "
+            + "; ".join(mismatched)
         )
 
     return {
@@ -440,6 +514,22 @@ def completeness_checks(user, year: int, month: int) -> list[dict]:
                 "opis": f"Zakupy z KSeF do sprawdzenia (kategoria, odliczenia): {to_review}",
             }
         )
+
+    record = MonthlySettlement.objects.filter(user=user, year=year, month=month).first()
+    if record is not None and record.revenue_from_ewp:
+        invoices_total = revenue_between(
+            user, start, end, D(company.lump_sum_rate or "14")
+        ).total
+        if invoices_total != record.total_revenue:
+            issues.append(
+                {
+                    "poziom": "wazne",
+                    "opis": (
+                        f"Przychód w ewidencji (JPK_EWP) {record.total_revenue} zł różni się "
+                        f"od faktur {invoices_total} zł — brakujące faktury albo różnica dat"
+                    ),
+                }
+            )
 
     unbilled = DutyShift.objects.filter(
         user=user, invoice__isnull=True, date__range=(start, end)

@@ -122,3 +122,74 @@ class SettlementsTests(TestCase):
     def test_completeness_checks(self):
         issues = settlements.completeness_checks(self.user, 2026, 1)
         self.assertIsInstance(issues, list)
+
+
+class EwpImportedSettlementsTests(TestCase):
+    """Rozliczenia z importu JPK_EWP: sam przychód, bez wpłat i zaliczek."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ewa", password="x")
+        CompanyInfo.objects.create(
+            user=self.user,
+            company_name="Firma",
+            tax_id="1234567890",
+            street="Ulica 1",
+            zip_code="00-001",
+            city="Wrocław",
+            bank_account_number="00",
+            lump_sum_rate="14",
+            zus_health_insurance_only=True,
+        )
+        contractor = Contractor.objects.create(
+            user=self.user, name="Szpital", tax_id="1111111111"
+        )
+        make_invoice(self.user, contractor, "1/2026", date(2026, 1, 15), "10000")
+        for month, revenue in ((1, "10000"), (2, "20000")):
+            MonthlySettlement.objects.create(
+                user=self.user,
+                year=2026,
+                month=month,
+                total_revenue=D(revenue),
+                health_insurance_paid=0,
+                income_tax_payable=0,
+                status="imported",
+                revenue_from_ewp=True,
+            )
+
+    def test_revenue_from_ewp_and_assumed_payments(self):
+        r = settlements.monthly_obligations(self.user, 2026, 2)
+        # luty: brak faktur, ale ewidencja ma 20 000 zł
+        self.assertEqual(r["przychod"]["razem"], D("20000"))
+        self.assertEqual(r["przychod"]["z_faktur"], D("0"))
+        self.assertEqual(r["przychod"]["zrodlo"], settlements.REVENUE_SOURCE_EWP)
+        # wpłata zdrowotnej przyjęta (styczniowa należna), a nie 0 z importu
+        self.assertEqual(
+            r["ryczalt_za_miesiac"]["skladka_zdrowotna_zaplacona_w_miesiacu"],
+            D("498.35"),
+        )
+        self.assertTrue(any("różni się od faktur" in n for n in r["uwagi"]))
+
+    def test_annual_uses_computed_advances_for_imported_months(self):
+        r = settlements.annual_settlement(self.user, 2026)
+        self.assertEqual(r["przychod"]["razem"], D("30000"))
+        self.assertGreater(r["pit28"]["zaplacone_zaliczki"], D("0"))
+        self.assertTrue(any("importu JPK_EWP" in n for n in r["uwagi"]))
+
+    def test_completeness_flags_ewp_vs_invoices(self):
+        issues = settlements.completeness_checks(self.user, 2026, 2)
+        self.assertTrue(any("JPK_EWP" in i["opis"] for i in issues))
+        self.assertFalse(
+            any(
+                "JPK_EWP" in i["opis"]
+                for i in settlements.completeness_checks(self.user, 2026, 1)
+            )
+        )
+
+    def test_draft_replaces_import_and_keeps_ewp_revenue(self):
+        s, created, _ = settlements.save_monthly_settlement(self.user, 2026, 2)
+        self.assertFalse(created)
+        s.refresh_from_db()
+        self.assertEqual(s.status, "draft")
+        self.assertTrue(s.revenue_from_ewp)
+        self.assertEqual(s.total_revenue, D("20000"))
+        self.assertEqual(s.health_insurance_paid, D("498.35"))

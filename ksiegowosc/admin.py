@@ -1157,12 +1157,13 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
         "year",
         "month",
         "total_revenue",
+        "revenue_from_ewp",
         "health_insurance_paid",
         "income_tax_payable",
         "status",
         "user",
     )
-    list_filter = ("status", "year", "month", "user")
+    list_filter = ("status", "revenue_from_ewp", "year", "month", "user")
     search_fields = ("year", "month")
     readonly_fields = ("created_at", "approved_at", "details")
     exclude = ("user",)
@@ -1307,26 +1308,42 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
                 monthly_revenues[year_month] += revenue
             created_count = 0
             updated_count = 0
+            warnings = []
             for (year, month), total_revenue in monthly_revenues.items():
-                settlement, created = MonthlySettlement.objects.update_or_create(
-                    user=user,
-                    year=year,
-                    month=month,
-                    defaults={
-                        "total_revenue": total_revenue,
-                        "health_insurance_paid": 0,
-                        "social_insurance_paid": 0,
-                        "labor_fund_paid": 0,
-                        "income_tax_payable": 0,
-                    },
-                )
-                if created:
+                existing = MonthlySettlement.objects.filter(
+                    user=user, year=year, month=month
+                ).first()
+                if existing is None:
+                    # Nowy miesiąc: sam przychód; wpłaty i zaliczkę uzupełni rozliczenie
+                    MonthlySettlement.objects.create(
+                        user=user,
+                        year=year,
+                        month=month,
+                        total_revenue=total_revenue,
+                        health_insurance_paid=0,
+                        social_insurance_paid=0,
+                        labor_fund_paid=0,
+                        income_tax_payable=0,
+                        status="imported",
+                        revenue_from_ewp=True,
+                    )
                     created_count += 1
-                else:
-                    updated_count += 1
-            warnings = [
-                "Pamiętaj, aby uzupełnić informacje o zapłaconych składkach ZUS dla zaimportowanych miesięcy."
-            ]
+                    continue
+                # Istniejące rozliczenie: aktualizujemy tylko przychód, wpłat nie zerujemy
+                if existing.status == "approved" and existing.total_revenue != total_revenue:
+                    warnings.append(
+                        f"{month:02d}/{year}: zmienił się przychód zatwierdzonego rozliczenia "
+                        f"({existing.total_revenue} → {total_revenue} zł) — przelicz je."
+                    )
+                existing.total_revenue = total_revenue
+                existing.revenue_from_ewp = True
+                existing.save(update_fields=["total_revenue", "revenue_from_ewp"])
+                updated_count += 1
+            if created_count:
+                warnings.append(
+                    "Nowe miesiące mają status „Import JPK_EWP” — wpłaty składek i zaliczki "
+                    "wyliczy asystent (zamknięcie miesiąca) albo formularz rozliczenia."
+                )
             return created_count, updated_count, warnings
         except ET.ParseError as e:
             raise ValueError(f"Błąd parsowania XML: {str(e)}")

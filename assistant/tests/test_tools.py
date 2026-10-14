@@ -140,3 +140,16 @@ class ApiTokenTests(TestCase):
         self.assertIsNone(ApiToken.resolve(raw + "x"))
         token.revoke()
         self.assertIsNone(ApiToken.resolve(raw))
+
+
+class RunMonthCloseViewTests(TestCase):
+    def test_button_runs_agent_and_redirects_to_report(self):
+        user = User.objects.create_superuser("szef", "s@example.com", "x")
+        make_company(user)
+        self.client.force_login(user)
+        url = "/admin/assistant/assistantreport/uruchom-zamkniecie/"
+        self.assertEqual(self.client.get(url).status_code, 200)
+        r = self.client.post(url, {"year": "2026", "month": "1"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(AssistantReport.objects.count(), 1)
+        self.assertFalse(MonthlySettlement.objects.exists())  # bez szkicu

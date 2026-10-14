@@ -1,9 +1,16 @@
 import secrets
 
 from django.contrib import admin, messages
+from django.shortcuts import redirect, render
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 
+from ksiegowosc.settlements import SettlementError
+from ksiegowosc.tax_engine import MissingYearParams
+from ksiegowosc.tax_engine.calendar import previous_month
+
+from .agents import close_month
 from .models import TOKEN_PREFIX, ApiToken, AssistantReport, hash_token
 
 
@@ -85,8 +92,50 @@ class AssistantReportAdmin(OwnDataMixin, admin.ModelAdmin):
     )
     exclude = ("content", "data")
 
+    change_list_template = "admin/assistant/assistantreport/change_list.html"
+
     def has_add_permission(self, request):
         return False
+
+    def get_urls(self):
+        custom = [
+            path(
+                "uruchom-zamkniecie/",
+                self.admin_site.admin_view(self.run_month_close_view),
+                name="assistant_run_month_close",
+            )
+        ]
+        return custom + super().get_urls()
+
+    def run_month_close_view(self, request):
+        today = timezone.localdate()
+        year, month = previous_month(today.year, today.month)
+        if request.method == "POST":
+            try:
+                year, month = int(request.POST["year"]), int(request.POST["month"])
+                report = close_month(
+                    request.user,
+                    year,
+                    month,
+                    save_draft=bool(request.POST.get("save_draft")),
+                )
+            except (KeyError, ValueError, SettlementError, MissingYearParams) as exc:
+                messages.error(request, f"Nie udało się zamknąć miesiąca: {exc}")
+            else:
+                messages.success(request, report.title)
+                return redirect(
+                    reverse("admin:assistant_assistantreport_change", args=[report.pk])
+                )
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "Zamknięcie miesiąca",
+            "year": year,
+            "month": month,
+            "years": list(range(today.year - 3, today.year + 1)),
+            "months": list(range(1, 13)),
+        }
+        return render(request, "admin/assistant/run_month_close.html", context)
 
     @admin.display(description="Treść")
     def rendered(self, obj):

@@ -913,11 +913,17 @@ class MonthlySettlement(models.Model):
         verbose_name="Opłacona składka na Fundusz Pracy",
     )
     STATUS_CHOICES = [
+        ("imported", "Import JPK_EWP (tylko przychód)"),
         ("draft", "Szkic (do zatwierdzenia)"),
         ("approved", "Zatwierdzone"),
     ]
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default="approved", verbose_name="Status"
+    )
+    revenue_from_ewp = models.BooleanField(
+        default=False,
+        verbose_name="Przychód z ewidencji (JPK_EWP)",
+        help_text="Przychód miesiąca pochodzi z zaimportowanej ewidencji, a nie z faktur.",
     )
     details = models.JSONField(
         null=True, blank=True, verbose_name="Szczegóły wyliczenia"

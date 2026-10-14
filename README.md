@@ -37,7 +37,8 @@ Obliczenia wykonuje moduł `ksiegowosc/tax_engine` — czyste funkcje z testami,
 - Ryczałt miesięczny: przychód wg stawek z pozycji faktur (data przychodu = wystawienie, nie później niż wykonanie usługi), odliczenie zapłaconych składek społecznych i 50% zdrowotnej, przenoszenie nadwyżki odliczeń na kolejne miesiące, zaokrąglenia do pełnych złotych.
 - Rozliczenie roczne: PIT-28 (podatek, zaliczki, dopłata/nadpłata) i roczne wyrównanie składki zdrowotnej, z terminami.
 - Terminy płatności przesuwane na najbliższy dzień roboczy (weekendy i święta, w tym Wigilia od 2025 r.).
-- Rozliczenia miesięczne mają status: szkic (od agenta) lub zatwierdzone.
+- Przychód miesiąca: z ewidencji przychodów, jeśli zaimportowano JPK_EWP (podstawa ryczałtu), w przeciwnym razie z faktur; rozbieżności między ewidencją a fakturami są zgłaszane.
+- Rozliczenia miesięczne mają status: import JPK_EWP (sam przychód — wpłaty i zaliczkę wylicza asystent), szkic (od agenta) lub zatwierdzone. Import JPK_EWP nie zeruje już wpłat w istniejących rozliczeniach.
 - Obecnie obsługiwany jest ryczałt; skala i podatek liniowy wymagają ewidencji kosztów (KPiR).
 - Dashboard finansowy: przychody, koszty, zysk, porównanie rok do roku, prognoza na koniec roku podatkowego (`/admin/ksiegowosc/monthlysettlement/dashboard/`).
 
@@ -82,7 +83,7 @@ Zasady bezpieczeństwa:
 - zapis tylko z tokenem z uprawnieniem zapisu i zawsze dwuetapowo: bez `confirm=true` narzędzie zwraca podgląd,
 - zatwierdzonych rozliczeń asystent nie nadpisuje.
 
-**Agent zamknięcia miesiąca** (`close_month`, timer systemd 3. dnia miesiąca o 7:15): liczy należności za poprzedni miesiąc, sprawdza kompletność (faktury bez pozycji, przeterminowane, niewysłane do KSeF, zakupy z KSeF do sprawdzenia, nierozliczone dyżury), zapisuje szkic rozliczenia i raport w „Raporty asystenta”; opcjonalnie wysyła raport e-mailem (`ASSISTANT_NOTIFY_EMAIL`).
+**Agent zamknięcia miesiąca** (`close_month`, timer systemd 3. dnia miesiąca o 7:15, ręcznie: „Raporty asystenta” → „Uruchom zamknięcie miesiąca”): liczy należności za poprzedni miesiąc, sprawdza kompletność (faktury bez pozycji, przeterminowane, niewysłane do KSeF, zakupy z KSeF do sprawdzenia, nierozliczone dyżury), zapisuje szkic rozliczenia i raport w „Raporty asystenta”; opcjonalnie wysyła raport e-mailem (`ASSISTANT_NOTIFY_EMAIL`).
 
 Podłączenie klienta (token z uprawnieniem odczytu lub zapisu):
 ```bash
@@ -247,7 +248,8 @@ static/                 sw.js, manifest i ikony PWA
 
 **1.5.0 (X 2026)**
 - Silnik obliczeń składek i ryczałtu z testami; panel (rozliczenie miesięczne, roczne, kalkulator ZUS) liczy nim zamiast stałej stawki 14%.
-- Asystent: serwer MCP, tokeny API, agent zamknięcia miesiąca, raporty.
+- Asystent: serwer MCP, tokeny API, agent zamknięcia miesiąca (także przycisk w panelu), raporty.
+- Import JPK_EWP: status „Import JPK_EWP”, przychód z ewidencji jako podstawa ryczałtu, porównanie z fakturami.
 - Poprawka wysyłki do KSeF (mapowanie środowiska produkcyjnego).
 
 **VIII–IX 2026**

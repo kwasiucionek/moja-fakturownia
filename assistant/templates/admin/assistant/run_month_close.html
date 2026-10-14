@@ -1,0 +1,45 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Zamknięcie miesiąca{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:assistant_assistantreport_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; Zamknięcie miesiąca
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid pt-3">
+    <h1 class="mb-3"><i class="fas fa-robot"></i> Agent: zamknięcie miesiąca</h1>
+    <p class="text-muted">
+        Liczy składki ZUS i ryczałt za wybrany miesiąc, sprawdza kompletność danych
+        (faktury, KSeF, zakupy, dyżury, zgodność z ewidencją JPK_EWP) i zapisuje raport.
+        Ze szkicem — zapisuje też rozliczenie miesięczne do zatwierdzenia; zatwierdzonych nie zmienia.
+    </p>
+    <form method="post" class="card card-body" style="max-width: 520px">
+        {% csrf_token %}
+        <div class="row g-2 mb-3">
+            <div class="col">
+                <label class="form-label" for="month">Miesiąc</label>
+                <select name="month" id="month" class="form-select">
+                    {% for m in months %}<option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label" for="year">Rok</label>
+                <select name="year" id="year" class="form-select">
+                    {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="save_draft" id="save_draft" checked>
+            <label class="form-check-label" for="save_draft">Zapisz szkic rozliczenia miesięcznego</label>
+        </div>
+        <button type="submit" class="btn btn-success"><i class="fas fa-play"></i> Uruchom</button>
+    </form>
+</div>
+{% endblock %}

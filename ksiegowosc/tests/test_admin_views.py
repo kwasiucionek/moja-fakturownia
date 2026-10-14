@@ -74,3 +74,36 @@ class SettlementAdminViewsTests(TestCase):
             "/admin/ksiegowosc/monthlysettlement/kalkulator-zus/?year=2030"
         )
         self.assertContains(r, "Brak parametrów")
+
+    def test_jpk_ewp_import_marks_new_months_and_keeps_paid_amounts(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        MonthlySettlement.objects.create(
+            user=self.user,
+            year=2026,
+            month=1,
+            total_revenue=D("9000"),
+            health_insurance_paid=D("498.35"),
+            income_tax_payable=D("1200"),
+            status="approved",
+        )
+        ns = "http://jpk.mf.gov.pl/wzor/2024/10/30/10301/"
+        xml = (
+            f'<?xml version="1.0" encoding="UTF-8"?><JPK xmlns="{ns}">'
+            "<EWPWiersz><K_2>2026-01-31</K_2><K_8>10000.00</K_8></EWPWiersz>"
+            "<EWPWiersz><K_2>2026-02-28</K_2><K_8>20000.00</K_8></EWPWiersz>"
+            "</JPK>"
+        ).encode()
+        r = self.client.post(
+            "/admin/ksiegowosc/monthlysettlement/import-jpk-ewp/",
+            {"xml_file": SimpleUploadedFile("ewp.xml", xml, "text/xml")},
+        )
+        self.assertEqual(r.status_code, 302)
+        jan = MonthlySettlement.objects.get(year=2026, month=1)
+        self.assertEqual(jan.status, "approved")
+        self.assertEqual(jan.total_revenue, D("10000"))
+        self.assertEqual(jan.health_insurance_paid, D("498.35"))
+        self.assertTrue(jan.revenue_from_ewp)
+        feb = MonthlySettlement.objects.get(year=2026, month=2)
+        self.assertEqual(feb.status, "imported")
+        self.assertTrue(feb.revenue_from_ewp)
