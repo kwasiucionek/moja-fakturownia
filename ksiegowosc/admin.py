@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, F, Max, Min, Q, Sum
 from django.db.models.functions import TruncMonth
@@ -22,6 +23,12 @@ from django.utils.safestring import mark_safe
 from ksef.services import send_invoice_to_ksef
 from weasyprint import HTML
 
+from .contractors import (
+    ContractorMergeError,
+    find_or_create_contractor,
+    merge_contractors,
+    pick_merge_target,
+)
 from .models import (
     BusinessSuspension,
     CompanyInfo,
@@ -37,6 +44,7 @@ from .models import (
     PurchaseInvoiceItem,
     YearlySettlement,
     ZUSRates,
+    normalize_tax_id,
 )
 
 
@@ -241,9 +249,54 @@ class CompanyInfoAdmin(admin.ModelAdmin):
 
 @admin.register(Contractor)
 class ContractorAdmin(admin.ModelAdmin):
-    list_display = ("name", "tax_id", "city", "user")
+    list_display = ("name", "tax_id", "city", "invoice_count", "user")
     search_fields = ("name", "tax_id")
     exclude = ("user",)
+    actions = ["merge_selected"]
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        owner = obj.user if obj else request.user
+
+        class ContractorForm(form):
+            # Pole „user” jest poza formularzem, więc Django nie sprawdza unikalności (user, NIP)
+            def clean_tax_id(self):
+                nip = normalize_tax_id(self.cleaned_data.get("tax_id"))
+                duplicate = (
+                    Contractor.objects.filter(user=owner, tax_id=nip)
+                    .exclude(pk=self.instance.pk)
+                    .first()
+                )
+                if nip and duplicate:
+                    raise ValidationError(
+                        f"Kontrahent z tym NIP-em już istnieje: {duplicate.name}."
+                    )
+                return nip
+
+        return ContractorForm
+
+    @admin.display(description="Faktury")
+    def invoice_count(self, obj):
+        return obj.invoice_set.count() + obj.purchaseinvoice_set.count()
+
+    @admin.action(description="Scal zaznaczonych kontrahentów (duplikaty)")
+    def merge_selected(self, request, queryset):
+        contractors = list(queryset)
+        if len(contractors) < 2:
+            messages.warning(request, "Zaznacz co najmniej dwóch kontrahentów do scalenia.")
+            return
+        target = pick_merge_target(contractors)
+        try:
+            moved = merge_contractors(target, contractors)
+        except ContractorMergeError as exc:
+            messages.error(request, f"Nie scalono: {exc}")
+            return
+        summary = ", ".join(f"{name}: {n}" for name, n in moved.items()) or "brak powiązań"
+        messages.success(
+            request,
+            f"Scalono {len(contractors) - 1} kontrahentów w „{target.name}” "
+            f"(NIP {target.tax_id or 'brak'}); przepięto — {summary}.",
+        )
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -822,7 +875,7 @@ class InvoiceAdmin(admin.ModelAdmin):
             ).text = company_info.tax_id.replace("-", "")
             ET.SubElement(
                 faktura, f"{{{ns['tns']}}}P_5B"
-            ).text = invoice.contractor.tax_id.replace("-", "")
+            ).text = normalize_tax_id(invoice.contractor.tax_id) or ""
             ET.SubElement(
                 faktura, f"{{{ns['tns']}}}P_6"
             ).text = invoice.sale_date.strftime("%Y-%m-%d")
@@ -994,25 +1047,19 @@ class InvoiceAdmin(admin.ModelAdmin):
                         f"Pominięto: Faktura o numerze '{invoice_number}' już istnieje w systemie."
                     )
                     continue
-                if buyer_nip:
-                    contractor, created = Contractor.objects.get_or_create(
-                        tax_id=buyer_nip,
-                        user=user,
-                        defaults={"name": buyer_name or "Brak nazwy w JPK"},
+                if not buyer_nip and not buyer_name:
+                    import_warnings.append(
+                        f"Pominięto fakturę (prawdopodobnie '{invoice_number}'): brak NIP i nazwy kontrahenta."
                     )
-                else:
-                    if not buyer_name:
-                        import_warnings.append(
-                            f"Pominięto fakturę (prawdopodobnie '{invoice_number}'): brak NIP i nazwy kontrahenta."
-                        )
-                        continue
-                    contractor, created = Contractor.objects.get_or_create(
-                        name=buyer_name, tax_id=None, user=user
+                    continue
+                # Dopasowanie po NIP-ie w dowolnym zapisie, a bez NIP-u — po nazwie
+                contractor, created = find_or_create_contractor(
+                    user, buyer_nip, buyer_name or "Brak nazwy w JPK"
+                )
+                if created and not buyer_nip:
+                    import_warnings.append(
+                        f"Utworzono nowego kontrahenta '{buyer_name}' bez numeru NIP."
                     )
-                    if created:
-                        import_warnings.append(
-                            f"Utworzono nowego kontrahenta '{buyer_name}' bez numeru NIP."
-                        )
                 issue_date = parse_date(issue_date_str)
                 sale_date = parse_date(sale_date_str) if sale_date_str else issue_date
                 total_amount = parse_decimal(total_amount_str)

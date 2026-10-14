@@ -16,12 +16,14 @@ from django.core.files.base import ContentFile
 from ksef2 import Client, Environment
 from ksef2.domain.models.invoices import InvoicesFilter
 
+from ksiegowosc.contractors import find_or_create_contractor
 from ksiegowosc.models import (
     CompanyInfo,
     Contractor,
     Invoice,
     InvoiceItem,
     PurchaseInvoice,
+    normalize_tax_id,
 )
 
 ENVIRONMENT_MAP = {
@@ -114,15 +116,7 @@ class KSeFImportResult:
 
 
 def _get_or_create_supplier(user, nip: str, name: str | None) -> Contractor:
-    contractor, _ = Contractor.objects.get_or_create(
-        user=user,
-        tax_id=nip,
-        defaults={"name": name or nip},
-    )
-    if name and contractor.name != name and contractor.name == contractor.tax_id:
-        # Uzupełnij nazwę, jeśli wcześniej kontrahent powstał tylko z NIP-em.
-        contractor.name = name
-        contractor.save(update_fields=["name"])
+    contractor, _ = find_or_create_contractor(user, nip, name)
     return contractor
 
 
@@ -136,14 +130,7 @@ class KSeFSalesImportResult:
 def _get_or_create_buyer(user, nip: str | None, name: str | None) -> Contractor | None:
     if not nip:
         return None
-    contractor, _ = Contractor.objects.get_or_create(
-        user=user,
-        tax_id=nip,
-        defaults={"name": name or nip},
-    )
-    if name and contractor.name != name and contractor.name == contractor.tax_id:
-        contractor.name = name
-        contractor.save(update_fields=["name"])
+    contractor, _ = find_or_create_contractor(user, nip, name)
     return contractor
 
 
@@ -300,7 +287,7 @@ def import_purchase_invoices_from_ksef(
                     exists = PurchaseInvoice.objects.filter(
                         user=user,
                         invoice_number=meta.invoice_number,
-                        supplier__tax_id=meta.seller.nip,
+                        supplier__tax_id=normalize_tax_id(meta.seller.nip),
                     ).exists()
                     if exists:
                         result.skipped_existing += 1

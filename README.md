@@ -12,6 +12,7 @@ Wersja: 1.6.0 · Python 3.12 · Django 6.1
 - Faktury z pozycjami i automatycznym przeliczaniem wartości; numeracja automatyczna.
 - Faktury korygujące powiązane z fakturą pierwotną (pozycje „było” / „powinno być”).
 - PDF faktury (WeasyPrint).
+- Kontrahenci: NIP zapisywany w jednej postaci (bez myślników, spacji i prefiksu PL), więc „691-21-31-539” i „6912131539” to ten sam kontrahent. Importy JPK_FA i KSeF dopasowują kontrahenta po NIP-ie, a bez NIP-u po nazwie. Duplikaty można scalić akcją „Scal zaznaczonych kontrahentów” — faktury, zakupy, dyżury i stawki przechodzą na rekord z NIP-em.
 - Płatności przypisane do faktur, status płatności (opłacona / częściowo / nieopłacona / przeterminowana), raport płatności i raport faktur przeterminowanych.
 
 ### KSeF (API 2.0, biblioteka `ksef2`)
@@ -252,6 +253,7 @@ static/                 sw.js, manifest i ikony PWA
 - Zawieszenie działalności: brak składek za pełne miesiące, proporcjonalne składki społeczne za miesiąc częściowy, uwzględnienie w rozliczeniu rocznym i raporcie agenta.
 - Dopłata rocznej składki zdrowotnej za poprzedni rok w odliczeniach majowych.
 - Import z KSeF za dowolny okres (od–do, miesięcznymi oknami); także w narzędziu MCP `import_from_ksef`.
+- Normalizacja NIP-u kontrahentów, dopasowanie w importach, scalanie duplikatów (akcja w panelu; migracja 0022 scala istniejące).
 
 **1.5.0 (X 2026)**
 - Silnik obliczeń składek i ryczałtu z testami; panel (rozliczenie miesięczne, roczne, kalkulator ZUS) liczy nim zamiast stałej stawki 14%.

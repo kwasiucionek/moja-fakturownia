@@ -667,6 +667,16 @@ class CompanyInfo(models.Model):
             return 0.14
 
 
+def normalize_tax_id(value) -> str | None:
+    """NIP bez spacji, myślników i kropek; polski NIP bez prefiksu PL. Pusty -> None."""
+    if value is None:
+        return None
+    value = re.sub(r"[\s\-.]", "", str(value)).upper()
+    if re.fullmatch(r"PL\d{10}", value):
+        value = value[2:]
+    return value or None
+
+
 class Contractor(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
     name = models.CharField(max_length=255, verbose_name="Nazwa kontrahenta")
@@ -695,6 +705,24 @@ class Contractor(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        # „691-21-31-539” to ten sam NIP co „6912131539”
+        self.tax_id = normalize_tax_id(self.tax_id)
+        if (
+            self.tax_id
+            and self.user_id
+            and Contractor.objects.filter(user_id=self.user_id, tax_id=self.tax_id)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            raise ValidationError({"tax_id": "Kontrahent z tym NIP-em już istnieje."})
+
+    def save(self, *args, **kwargs):
+        self.tax_id = normalize_tax_id(self.tax_id)
+        super().save(*args, **kwargs)
 
 
 class Invoice(models.Model):
