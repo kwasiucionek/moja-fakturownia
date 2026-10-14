@@ -44,9 +44,21 @@ def _report_markdown(
     lump = obligations["ryczalt_za_miesiac"]
     rev = obligations["przychod"]
     social = zus["spoleczne"]
-    lines = [
-        f"## Zamknięcie miesiąca: {MONTHS_PL[month]} {year}",
-        "",
+    suspension = obligations.get("zawieszenie")
+    lines = [f"## Zamknięcie miesiąca: {MONTHS_PL[month]} {year}", ""]
+    if suspension and suspension["caly_miesiac"]:
+        lines += [
+            "**Działalność zawieszona przez cały miesiąc** — składki ZUS za ten miesiąc "
+            "nie są należne.",
+            "",
+        ]
+    elif suspension:
+        lines += [
+            f"**Zawieszenie przez {suspension['dni']} dni** — składki społeczne "
+            "proporcjonalnie, zdrowotna w pełnej wysokości.",
+            "",
+        ]
+    lines += [
         "### Do zapłaty",
         f"- **ZUS razem: {zl(zus['razem_do_zaplaty'])}** — termin {zus['termin']:%d.%m.%Y}",
         f"  - składka zdrowotna: {zl(zus['zdrowotna']['skladka'])} "

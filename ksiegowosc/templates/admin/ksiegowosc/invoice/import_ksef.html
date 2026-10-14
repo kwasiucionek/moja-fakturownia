@@ -40,7 +40,17 @@
                 <div class="form-row">
                     <div>
                         <label for="id_days">Za ile ostatnich dni pobrać:</label>
-                        <input type="number" name="days" id="id_days" value="30" min="1" max="365">
+                        <input type="number" name="days" id="id_days" value="30" min="1" max="730">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div>
+                        <label for="id_date_from">albo okres — od:</label>
+                        <input type="date" name="date_from" id="id_date_from">
+                        <label for="id_date_to" style="margin-left: 1rem">do:</label>
+                        <input type="date" name="date_to" id="id_date_to">
+                        <div class="help">Podany okres ma pierwszeństwo przed liczbą dni. Dłuższe okresy
+                        są pobierane z KSeF miesiąc po miesiącu.</div>
                     </div>
                 </div>
             </fieldset>

@@ -85,11 +85,28 @@ class SocialContributions:
 
 
 def social_contributions(
-    year: int, profile: ContributionProfile
+    year: int,
+    profile: ContributionProfile,
+    active_days: int | None = None,
+    days_in_month: int | None = None,
 ) -> SocialContributions:
-    """Miesięczne składki społeczne dla wariantu z profilu."""
+    """Miesięczne składki społeczne dla wariantu z profilu.
+
+    Przy zawieszeniu działalności przez część miesiąca (`active_days` < `days_in_month`)
+    podstawę zmniejsza się proporcjonalnie do liczby dni prowadzenia działalności;
+    przy zawieszeniu przez cały miesiąc składki nie są należne.
+    """
     params = get_year_params(year)
     variant = profile.zus_variant
+    partial = (
+        active_days is not None
+        and days_in_month is not None
+        and active_days < days_in_month
+    )
+    if partial and active_days <= 0:
+        return SocialContributions(
+            base=ZERO, notes=["zawieszenie działalności przez cały miesiąc"]
+        )
 
     if variant in ("health_only", "start_relief"):
         return SocialContributions(base=ZERO, notes=[ZUS_VARIANT_LABELS[variant]])
@@ -110,17 +127,25 @@ def social_contributions(
     else:
         base = params.full_social_base
 
+    full_month_base = base
+    notes = [ZUS_VARIANT_LABELS[variant]]
+    if partial:
+        base = money(base * active_days / days_in_month)
+        notes.append(
+            f"podstawa proporcjonalna do dni działalności: {active_days}/{days_in_month}"
+        )
+
     result = SocialContributions(
         base=base,
         pension=pct(base, params.pension_rate),
         disability=pct(base, params.disability_rate),
         accident=pct(base, params.accident_rate),
-        notes=[ZUS_VARIANT_LABELS[variant]],
+        notes=notes,
     )
     if profile.sickness_insurance:
         result.sickness = pct(base, params.sickness_rate)
     # Fundusz Pracy nie jest należny, gdy podstawa jest niższa od płacy minimalnej
-    if base >= params.minimum_wage:
+    if full_month_base >= params.minimum_wage:
         result.labor_fund = pct(base, params.labor_fund_rate)
     else:
         result.notes.append("bez Funduszu Pracy (podstawa niższa niż płaca minimalna)")

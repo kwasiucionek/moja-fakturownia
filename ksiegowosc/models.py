@@ -1613,3 +1613,38 @@ class DutyShift(models.Model):
         if rate is None:
             return None
         return (Decimal(rate) * self.hours).quantize(Decimal("0.01"))
+
+
+class BusinessSuspension(models.Model):
+    """Okres zawieszenia działalności (wg CEIDG).
+
+    Za pełne miesiące zawieszenia składki ZUS (społeczne i zdrowotna) nie są należne;
+    za miesiąc zawieszony częściowo składki społeczne liczy się proporcjonalnie do dni
+    działalności, a zdrowotną w pełnej wysokości.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Użytkownik")
+    date_from = models.DateField(verbose_name="Zawieszenie od")
+    date_to = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Zawieszenie do (włącznie)",
+        help_text="Ostatni dzień zawieszenia; puste = zawieszenie trwa.",
+    )
+    notes = models.CharField(max_length=255, blank=True, default="", verbose_name="Uwagi")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Zawieszenie działalności"
+        verbose_name_plural = "Zawieszenia działalności"
+        ordering = ["-date_from"]
+
+    def __str__(self):
+        end = self.date_to.strftime("%d.%m.%Y") if self.date_to else "nadal"
+        return f"Zawieszenie {self.date_from:%d.%m.%Y} – {end}"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.date_to and self.date_to < self.date_from:
+            raise ValidationError({"date_to": "Koniec zawieszenia nie może być przed jego początkiem."})

@@ -23,6 +23,7 @@ from ksef.services import send_invoice_to_ksef
 from weasyprint import HTML
 
 from .models import (
+    BusinessSuspension,
     CompanyInfo,
     Contractor,
     DutyRate,
@@ -37,6 +38,23 @@ from .models import (
     YearlySettlement,
     ZUSRates,
 )
+
+
+def _ksef_import_period(post):
+    """Okres importu z KSeF z formularza: daty od–do (pierwszeństwo) albo ostatnie N dni."""
+    raw_from = (post.get("date_from") or "").strip()
+    raw_to = (post.get("date_to") or "").strip()
+    if raw_from or raw_to:
+        if not raw_from:
+            raise ValueError("podaj datę początkową")
+        date_from = date.fromisoformat(raw_from)
+        date_to = date.fromisoformat(raw_to) if raw_to else None
+        return 30, date_from, date_to
+    try:
+        days = int(post.get("days", 30))
+    except (TypeError, ValueError):
+        days = 30
+    return max(1, min(days, 730)), None, None
 
 DNI_TYGODNIA_PL = [
     "poniedziałek",
@@ -460,11 +478,13 @@ class InvoiceAdmin(admin.ModelAdmin):
 
         if request.method == "POST":
             try:
-                days = int(request.POST.get("days", 30))
-            except (TypeError, ValueError):
-                days = 30
-
-            result = import_sales_invoices_from_ksef(company_info, days=days)
+                days, date_from, date_to = _ksef_import_period(request.POST)
+                result = import_sales_invoices_from_ksef(
+                    company_info, days=days, date_from=date_from, date_to=date_to
+                )
+            except ValueError as exc:
+                messages.error(request, f"Nieprawidłowy okres importu: {exc}")
+                return redirect(request.path)
 
             if result.created:
                 messages.success(request, f"Utworzono {result.created} nowych faktur na podstawie KSeF.")
@@ -2091,11 +2111,13 @@ class PurchaseInvoiceAdmin(admin.ModelAdmin):
 
         if request.method == "POST":
             try:
-                days = int(request.POST.get("days", 30))
-            except (TypeError, ValueError):
-                days = 30
-
-            result = import_purchase_invoices_from_ksef(company_info, days=days)
+                days, date_from, date_to = _ksef_import_period(request.POST)
+                result = import_purchase_invoices_from_ksef(
+                    company_info, days=days, date_from=date_from, date_to=date_to
+                )
+            except ValueError as exc:
+                messages.error(request, f"Nieprawidłowy okres importu: {exc}")
+                return redirect(request.path)
 
             if result.created:
                 messages.success(request, f"Zaimportowano {result.created} nowych faktur zakupowych z KSeF.")
@@ -2496,3 +2518,22 @@ class DutyShiftAdmin(admin.ModelAdmin):
         suffix = invoice.invoice_number.replace("/", "_") if invoice else timezone.now().strftime("%Y%m%d")
         response["Content-Disposition"] = f'attachment; filename="zalacznik-dyzury-{suffix}.pdf"'
         return response
+
+
+# ==== ZAWIESZENIE DZIAŁALNOŚCI ====
+
+
+@admin.register(BusinessSuspension)
+class BusinessSuspensionAdmin(admin.ModelAdmin):
+    list_display = ("date_from", "date_to", "notes", "user")
+    list_filter = ("user",)
+    exclude = ("user",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs if request.user.is_superuser else qs.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not obj.user_id:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)

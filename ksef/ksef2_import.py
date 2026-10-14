@@ -7,9 +7,8 @@ document_file na PurchaseInvoice, do wglądu/archiwum.
 
 from __future__ import annotations
 
-import io
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import date, datetime, time, timedelta, timezone as dt_timezone
 from decimal import Decimal
 
 from django.core.files.base import ContentFile
@@ -17,7 +16,13 @@ from django.core.files.base import ContentFile
 from ksef2 import Client, Environment
 from ksef2.domain.models.invoices import InvoicesFilter
 
-from ksiegowosc.models import CompanyInfo, Contractor, Invoice, InvoiceItem, PurchaseInvoice
+from ksiegowosc.models import (
+    CompanyInfo,
+    Contractor,
+    Invoice,
+    InvoiceItem,
+    PurchaseInvoice,
+)
 
 ENVIRONMENT_MAP = {
     "test": Environment.TEST,
@@ -28,9 +33,77 @@ ENVIRONMENT_MAP = {
 # Faktury z KSeF nie niosą informacji o kategorii kosztu w Twojej appce —
 # każda zaimportowana faktura ląduje z tą kategorią i wymaga ręcznego
 # doprecyzowania (widać to po `notes`, które oznaczamy poniżej).
-DEFAULT_IMPORT_CATEGORY = "other" if any(
-    c[0] == "other" for c in PurchaseInvoice._meta.get_field("category").choices
-) else PurchaseInvoice._meta.get_field("category").choices[0][0]
+DEFAULT_IMPORT_CATEGORY = (
+    "other"
+    if any(c[0] == "other" for c in PurchaseInvoice._meta.get_field("category").choices)
+    else PurchaseInvoice._meta.get_field("category").choices[0][0]
+)
+
+
+def import_period(
+    days: int = 30, date_from: date | None = None, date_to: date | None = None
+) -> tuple[datetime, datetime]:
+    """Zakres importu: jawne daty (od–do) albo ostatnie `days` dni. Koniec nie później niż teraz."""
+    now = datetime.now(tz=dt_timezone.utc)
+    if date_from is None:
+        start = now - timedelta(days=days)
+    else:
+        start = datetime.combine(date_from, time.min, tzinfo=dt_timezone.utc)
+    end = (
+        min(now, datetime.combine(date_to, time.max, tzinfo=dt_timezone.utc))
+        if date_to is not None
+        else now
+    )
+    if start > end:
+        raise ValueError("Data początkowa importu jest późniejsza niż końcowa.")
+    return start, end
+
+
+def month_windows(start: datetime, end: datetime) -> list[tuple[datetime, datetime]]:
+    """Dzieli zakres na okna w obrębie miesięcy kalendarzowych.
+
+    KSeF ogranicza zakres dat w jednym zapytaniu o metadane faktur — dłuższe okresy
+    pobieramy miesiąc po miesiącu.
+    """
+    windows = []
+    cursor = start
+    while cursor <= end:
+        if cursor.month == 12:
+            next_month = cursor.replace(
+                year=cursor.year + 1,
+                month=1,
+                day=1,
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+        else:
+            next_month = cursor.replace(
+                month=cursor.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+        window_end = min(end, next_month - timedelta(microseconds=1))
+        windows.append((cursor, window_end))
+        cursor = next_month
+    return windows
+
+
+def _metadata_pages(auth, role: str, start: datetime, end: datetime, errors: list[str]):
+    for window_start, window_end in month_windows(start, end):
+        filters = InvoicesFilter(
+            role=role,
+            date_type="issue_date",
+            date_from=window_start,
+            date_to=window_end,
+            amount_type="brutto",
+        )
+        try:
+            yield from auth.invoices.query_metadata_pages(filters=filters)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(
+                f"Błąd zapytania do KSeF za okres {window_start:%Y-%m-%d} – "
+                f"{window_end:%Y-%m-%d}: {exc}"
+            )
 
 
 @dataclass
@@ -75,7 +148,11 @@ def _get_or_create_buyer(user, nip: str | None, name: str | None) -> Contractor 
 
 
 def import_sales_invoices_from_ksef(
-    company_info: CompanyInfo, *, days: int = 30
+    company_info: CompanyInfo,
+    *,
+    days: int = 30,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> KSeFSalesImportResult:
     """Importuje/synchronizuje faktury sprzedażowe (jako wystawca) z KSeF.
 
@@ -88,10 +165,14 @@ def import_sales_invoices_from_ksef(
     result = KSeFSalesImportResult()
 
     if not company_info.ksef_token:
-        result.errors.append("Brak tokenu KSeF w danych firmy (CompanyInfo.ksef_token).")
+        result.errors.append(
+            "Brak tokenu KSeF w danych firmy (CompanyInfo.ksef_token)."
+        )
         return result
 
-    environment = ENVIRONMENT_MAP.get(company_info.ksef_environment or "test", Environment.TEST)
+    environment = ENVIRONMENT_MAP.get(
+        company_info.ksef_environment or "test", Environment.TEST
+    )
     user = company_info.user
 
     client = Client(environment)
@@ -100,17 +181,10 @@ def import_sales_invoices_from_ksef(
         nip=company_info.tax_id,
     )
 
-    now = datetime.now(tz=dt_timezone.utc)
-    filters = InvoicesFilter(
-        role="seller",
-        date_type="issue_date",
-        date_from=now - timedelta(days=days),
-        date_to=now,
-        amount_type="brutto",
-    )
+    start, end = import_period(days, date_from, date_to)
 
     try:
-        pages = auth.invoices.query_metadata_pages(filters=filters)
+        pages = _metadata_pages(auth, "seller", start, end, result.errors)
         for page in pages:
             for meta in page.invoices:
                 try:
@@ -139,7 +213,9 @@ def import_sales_invoices_from_ksef(
                         if meta.buyer and meta.buyer.identifier
                         else None
                     )
-                    buyer = _get_or_create_buyer(user, buyer_nip, meta.buyer.name if meta.buyer else None)
+                    buyer = _get_or_create_buyer(
+                        user, buyer_nip, meta.buyer.name if meta.buyer else None
+                    )
                     if buyer is None:
                         result.errors.append(
                             f"Faktura {meta.invoice_number}: brak NIP nabywcy w metadanych — pomiń lub dodaj kontrahenta ręcznie."
@@ -182,9 +258,14 @@ def import_sales_invoices_from_ksef(
 
 
 def import_purchase_invoices_from_ksef(
-    company_info: CompanyInfo, *, days: int = 30
+    company_info: CompanyInfo,
+    *,
+    days: int = 30,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> KSeFImportResult:
-    """Importuje faktury zakupowe (jako nabywca) z KSeF za ostatnie `days` dni.
+    """Importuje faktury zakupowe (jako nabywca) z KSeF za ostatnie `days` dni
+    albo za okres `date_from`–`date_to`.
 
     Wymaga wypełnionego `company_info.ksef_token` i `company_info.tax_id`.
     Tworzy `PurchaseInvoice` dla każdej faktury, której numer jeszcze nie ma
@@ -193,10 +274,14 @@ def import_purchase_invoices_from_ksef(
     result = KSeFImportResult()
 
     if not company_info.ksef_token:
-        result.errors.append("Brak tokenu KSeF w danych firmy (CompanyInfo.ksef_token).")
+        result.errors.append(
+            "Brak tokenu KSeF w danych firmy (CompanyInfo.ksef_token)."
+        )
         return result
 
-    environment = ENVIRONMENT_MAP.get(company_info.ksef_environment or "test", Environment.TEST)
+    environment = ENVIRONMENT_MAP.get(
+        company_info.ksef_environment or "test", Environment.TEST
+    )
     user = company_info.user
 
     client = Client(environment)
@@ -205,17 +290,10 @@ def import_purchase_invoices_from_ksef(
         nip=company_info.tax_id,
     )
 
-    now = datetime.now(tz=dt_timezone.utc)
-    filters = InvoicesFilter(
-        role="buyer",
-        date_type="issue_date",
-        date_from=now - timedelta(days=days),
-        date_to=now,
-        amount_type="brutto",
-    )
+    start, end = import_period(days, date_from, date_to)
 
     try:
-        pages = auth.invoices.query_metadata_pages(filters=filters)
+        pages = _metadata_pages(auth, "buyer", start, end, result.errors)
         for page in pages:
             for meta in page.invoices:
                 try:
@@ -228,14 +306,16 @@ def import_purchase_invoices_from_ksef(
                         result.skipped_existing += 1
                         continue
 
-                    supplier = _get_or_create_supplier(user, meta.seller.nip, meta.seller.name)
+                    supplier = _get_or_create_supplier(
+                        user, meta.seller.nip, meta.seller.name
+                    )
 
                     purchase_invoice = PurchaseInvoice(
                         user=user,
                         invoice_number=meta.invoice_number,
                         supplier=supplier,
                         issue_date=meta.issue_date,
-                        receipt_date=now.date(),
+                        receipt_date=datetime.now(tz=dt_timezone.utc).date(),
                         service_date=meta.issue_date,
                         net_amount=Decimal(str(meta.net_amount)),
                         vat_amount=Decimal(str(meta.vat_amount)),
@@ -250,7 +330,9 @@ def import_purchase_invoices_from_ksef(
                     )
 
                     try:
-                        xml_bytes = auth.invoices.download_invoice(ksef_number=meta.ksef_number)
+                        xml_bytes = auth.invoices.download_invoice(
+                            ksef_number=meta.ksef_number
+                        )
                         purchase_invoice.document_file.save(
                             f"ksef_{meta.ksef_number}.xml",
                             ContentFile(xml_bytes),

@@ -169,3 +169,13 @@ class DeadlineTests(SimpleTestCase):
     def test_annual_deadlines(self):
         self.assertEqual(annual_return_deadline(2025), date(2026, 4, 30))
         self.assertEqual(annual_health_deadline(2025), date(2026, 5, 20))
+
+
+class PartialMonthSocialTests(SimpleTestCase):
+    def test_proportional_base_and_full_suspension(self):
+        p = ContributionProfile(zus_variant="full")
+        half = social_contributions(2026, p, active_days=15, days_in_month=30)
+        self.assertEqual(half.base, D("2826.00"))
+        self.assertGreater(half.labor_fund, D("0"))  # FP wg pełnej podstawy miesiąca
+        none = social_contributions(2026, p, active_days=0, days_in_month=31)
+        self.assertEqual(none.total, D("0.00"))

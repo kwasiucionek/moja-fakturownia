@@ -245,3 +245,74 @@ class PreviousYearHealthReconciliationTests(TestCase):
             - without["pit28"]["skladka_zdrowotna_zaplacona"],
             D("307.77"),
         )
+
+
+class BusinessSuspensionTests(TestCase):
+    """Zawieszenie działalności: brak składek za pełne miesiące zawieszenia."""
+
+    def setUp(self):
+        from ksiegowosc.models import BusinessSuspension
+
+        self.Suspension = BusinessSuspension
+        self.user = User.objects.create_user("zawieszony", password="x")
+        CompanyInfo.objects.create(
+            user=self.user,
+            company_name="Firma",
+            tax_id="1234567890",
+            street="Ulica 1",
+            zip_code="00-001",
+            city="Wrocław",
+            bank_account_number="00",
+            lump_sum_rate="14",
+            zus_health_insurance_only=True,
+        )
+        c = Contractor.objects.create(user=self.user, name="Szpital", tax_id="111")
+        # 2025: próg 60 tys. przekroczony w lutym -> dopłata za 2025 = 307,77 zł
+        make_invoice(self.user, c, "1/2025", date(2025, 1, 31), "30000")
+        make_invoice(self.user, c, "2/2025", date(2025, 2, 28), "40000")
+        for month in range(1, 5):
+            make_invoice(self.user, c, f"{month}/2026", date(2026, month, 28), "10000")
+        make_invoice(self.user, c, "6/2026", date(2026, 6, 30), "37060")
+
+    def test_full_month_suspension(self):
+        self.Suspension.objects.create(
+            user=self.user, date_from=date(2026, 5, 1), date_to=date(2026, 5, 31)
+        )
+        may = settlements.monthly_obligations(self.user, 2026, 5)
+        self.assertEqual(may["zus_za_miesiac"]["razem_do_zaplaty"], D("0"))
+        self.assertTrue(may["zawieszenie"]["caly_miesiac"])
+        # w maju zapłacono kwiecień (498,35) + dopłatę za 2025 (307,77)
+        self.assertEqual(
+            may["ryczalt_za_miesiac"]["skladka_zdrowotna_zaplacona_w_miesiacu"],
+            D("806.12"),
+        )
+        june = settlements.monthly_obligations(self.user, 2026, 6)
+        lump = june["ryczalt_za_miesiac"]
+        # w czerwcu nie płaci się składki za zawieszony maj
+        self.assertEqual(lump["skladka_zdrowotna_zaplacona_w_miesiacu"], D("0"))
+        self.assertEqual(lump["odliczenia_z_poprzednich_miesiecy"], D("403.06"))
+        # (37 060 − 403,06) × 14% = 5 131,98 -> 5 132
+        self.assertEqual(lump["podatek"], D("5132"))
+
+    def test_annual_health_counts_only_active_months(self):
+        self.Suspension.objects.create(
+            user=self.user, date_from=date(2026, 5, 1), date_to=date(2026, 5, 31)
+        )
+        health = settlements.annual_settlement(self.user, 2026)["zdrowotna_roczna"]
+        self.assertEqual(health["miesiace_dzialalnosci"], 11)
+        self.assertEqual(health["miesiace_zawieszenia"], [5])
+
+    def test_partial_suspension_keeps_full_health(self):
+        self.Suspension.objects.create(
+            user=self.user, date_from=date(2026, 5, 10), date_to=date(2026, 5, 31)
+        )
+        may = settlements.monthly_obligations(self.user, 2026, 5)
+        self.assertFalse(may["zawieszenie"]["caly_miesiac"])
+        self.assertEqual(may["zus_za_miesiac"]["zdrowotna"]["skladka"], D("498.35"))
+
+    def test_invoice_in_suspended_month_is_flagged(self):
+        self.Suspension.objects.create(
+            user=self.user, date_from=date(2026, 6, 1), date_to=None
+        )
+        issues = settlements.completeness_checks(self.user, 2026, 6)
+        self.assertTrue(any("zawieszenia" in i["opis"] for i in issues))

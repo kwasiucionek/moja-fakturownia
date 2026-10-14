@@ -80,7 +80,7 @@ mcp = MCPServer(
     name="moja-fakturownia",
     title="Moja Fakturownia",
     instructions=INSTRUCTIONS,
-    version="1.5.0",
+    version="1.6.0",
     token_verifier=DjangoTokenVerifier(),
     auth=AuthSettings(
         issuer_url=PUBLIC_URL,
@@ -276,11 +276,22 @@ async def import_from_ksef(
         Literal["sales", "purchases"],
         Field(description="sales = sprzedaż, purchases = zakupy"),
     ],
-    days: Annotated[int, Field(ge=1, le=90, description="Ile dni wstecz")] = 30,
+    days: Annotated[int, Field(ge=1, le=730, description="Ile dni wstecz")] = 30,
+    date_from: Annotated[
+        str | None, Field(description="Okres od (RRRR-MM-DD) — zamiast days")
+    ] = None,
+    date_to: Annotated[str | None, Field(description="Okres do (RRRR-MM-DD)")] = None,
     confirm: Confirm = False,
 ) -> dict[str, Any]:
-    """Pobiera faktury z KSeF do aplikacji (bez duplikatów)."""
-    return await _call(tools.import_from_ksef, kind=kind, days=days, confirm=confirm)
+    """Pobiera faktury z KSeF do aplikacji (bez duplikatów), dowolny okres — miesiąc po miesiącu."""
+    return await _call(
+        tools.import_from_ksef,
+        kind=kind,
+        days=days,
+        date_from=date_from,
+        date_to=date_to,
+        confirm=confirm,
+    )
 
 
 @mcp.custom_route("/mcp-health", methods=["GET"])

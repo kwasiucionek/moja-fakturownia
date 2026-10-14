@@ -16,6 +16,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .models import (
+    BusinessSuspension,
     CompanyInfo,
     DutyShift,
     Invoice,
@@ -177,14 +178,60 @@ def _health_due(year: int, profile, cumulative_base: Decimal) -> dict:
     return health_contribution(year, profile, cumulative_base)
 
 
+def suspended_days_by_month(user, year: int) -> dict[int, int]:
+    """Liczba dni zawieszenia działalności w poszczególnych miesiącach roku."""
+    year_start, year_end = date(year, 1, 1), date(year, 12, 31)
+    periods = list(
+        BusinessSuspension.objects.filter(user=user, date_from__lte=year_end).filter(
+            Q(date_to__isnull=True) | Q(date_to__gte=year_start)
+        )
+    )
+    result = {}
+    if not periods:
+        return result
+    for m in range(1, 13):
+        start, end = month_range(year, m)
+        days: set[int] = set()
+        for period in periods:
+            first = max(start, period.date_from)
+            last = min(end, period.date_to or end)
+            if first <= last:
+                days.update(range(first.toordinal(), last.toordinal() + 1))
+        if days:
+            result[m] = len(days)
+    return result
+
+
+def _suspended_health(cumulative_base: Decimal) -> dict:
+    return {
+        "podstawa": ZERO,
+        "mnoznik_przecietnego_wynagrodzenia": ZERO,
+        "przychod_narastajaco": cumulative_base,
+        "skladka": ZERO,
+        "zawieszenie": True,
+    }
+
+
 def _previous_december_dues(
     user, company, profile, year: int
 ) -> tuple[Decimal, Decimal, list[str]]:
     """Składki należne za grudzień roku poprzedniego (zapłacone zwykle w styczniu)."""
     notes = []
     prev = year - 1
+    december_days = 31
+    suspended = suspended_days_by_month(user, prev).get(12, 0)
+    if suspended >= december_days:
+        notes.append(
+            f"grudzień {prev}: zawieszenie — w styczniu brak składek za grudzień"
+        )
+        return ZERO, ZERO, notes
     try:
-        social = social_contributions(prev, profile)
+        social = social_contributions(
+            prev,
+            profile,
+            active_days=december_days - suspended if suspended else None,
+            days_in_month=december_days if suspended else None,
+        )
         revenue = year_revenue_total(user, prev, profile.default_lump_sum_rate)
         health = _health_due(
             prev, profile, max(ZERO, revenue - social.social_total * 12)
@@ -246,6 +293,7 @@ def year_breakdown(
     overrides = overrides or {}
     social = social_contributions(year, profile)
     saved = {s.month: s for s in MonthlySettlement.objects.filter(user=user, year=year)}
+    suspended = suspended_days_by_month(user, year)
 
     months = []
     cumulative_revenue = ZERO
@@ -276,6 +324,26 @@ def year_breakdown(
                 f"{from_invoices.total} zł"
             )
 
+        days_in_month = month_range(year, m)[1].day
+        suspended_days = suspended.get(m, 0)
+        fully_suspended = suspended_days >= days_in_month
+        if suspended_days:
+            month_social = social_contributions(
+                year,
+                profile,
+                active_days=days_in_month - suspended_days,
+                days_in_month=days_in_month,
+            )
+            month_notes.append(
+                "zawieszenie działalności przez cały miesiąc — składki za ten miesiąc "
+                "nie są należne"
+                if fully_suspended
+                else f"zawieszenie przez {suspended_days} dni — składki społeczne "
+                "proporcjonalnie, zdrowotna w pełnej wysokości"
+            )
+        else:
+            month_social = social
+
         override = overrides.get(m, {})
         if "health_paid" in override or "social_paid" in override:
             health_paid = D(override.get("health_paid", prev_health_due))
@@ -296,9 +364,11 @@ def year_breakdown(
 
         cumulative_revenue += revenue.total
         cumulative_social_paid += social_paid
-        health = _health_due(
-            year, profile, max(ZERO, cumulative_revenue - cumulative_social_paid)
-        )
+        health_base = max(ZERO, cumulative_revenue - cumulative_social_paid)
+        if fully_suspended:
+            health = _suspended_health(health_base)
+        else:
+            health = _health_due(year, profile, health_base)
         carried_in = carry
         tax = lump_sum_tax(
             revenue.by_rate,
@@ -314,8 +384,10 @@ def year_breakdown(
                 "revenue": revenue,
                 "revenue_source": revenue_source,
                 "invoices_total": from_invoices.total,
-                "social_due": social,
+                "social_due": month_social,
                 "health_due": health,
+                "suspended_days": suspended_days,
+                "fully_suspended": fully_suspended,
                 "health_paid": health_paid,
                 "social_paid": social_paid,
                 "carried_in": carried_in,
@@ -324,7 +396,7 @@ def year_breakdown(
                 "notes": month_notes,
             }
         )
-        prev_social_due, prev_health_due = social.social_total, health["skladka"]
+        prev_social_due, prev_health_due = month_social.social_total, health["skladka"]
 
     return {"company": company, "profile": profile, "months": months, "notes": notes}
 
@@ -364,6 +436,14 @@ def monthly_obligations(
                 (r["revenue"].total for r in data["months"]), ZERO
             ),
         },
+        "zawieszenie": (
+            {
+                "dni": row["suspended_days"],
+                "caly_miesiac": row["fully_suspended"],
+            }
+            if row["suspended_days"]
+            else None
+        ),
         "zus_za_miesiac": {
             "spoleczne": social.as_dict(),
             "zdrowotna": health,
@@ -418,17 +498,21 @@ def annual_settlement(
             advances += row["tax"].tax
             advance_sources.add("wyliczenie")
 
-    # Roczne rozliczenie zdrowotnej: należna = 12 × składka z progu dla przychodu rocznego
-    active_months = 12
+    # Roczne rozliczenie zdrowotnej: należna = składka z progu dla przychodu rocznego
+    # × liczba miesięcy działalności (bez miesięcy zawieszonych w całości)
+    start_month = 1
     if company.business_start_date and company.business_start_date.year == year:
-        active_months = 13 - company.business_start_date.month
+        start_month = company.business_start_date.month
+    active_rows = [
+        r for r in months if r["month"] >= start_month and not r["fully_suspended"]
+    ]
+    active_months = len(active_rows)
+    suspended_months = [r["month"] for r in months if r["fully_suspended"]]
     revenue_total = sum(revenue_by_rate.values(), ZERO)
     annual_health_base = max(ZERO, revenue_total - social_paid)
     health_tier = _health_due(year, profile, annual_health_base)
     health_due_year = health_tier["skladka"] * active_months
-    health_monthly_sum = sum(
-        (r["health_due"]["skladka"] for r in months[13 - active_months - 1 :]), ZERO
-    )
+    health_monthly_sum = sum((r["health_due"]["skladka"] for r in active_rows), ZERO)
 
     drafts = [
         r["month"]
@@ -487,6 +571,7 @@ def annual_settlement(
             "podstawa_przychod_minus_spoleczne": annual_health_base,
             "skladka_miesieczna_wg_progu_rocznego": health_tier["skladka"],
             "miesiace_dzialalnosci": active_months,
+            "miesiace_zawieszenia": suspended_months,
             "nalezna_za_rok": health_due_year,
             "nalezna_miesiecznie_suma": health_monthly_sum,
             "doplata" if health_due_year >= health_monthly_sum else "nadplata": abs(
@@ -563,6 +648,20 @@ def completeness_checks(user, year: int, month: int) -> list[dict]:
                 "opis": f"Zakupy z KSeF do sprawdzenia (kategoria, odliczenia): {to_review}",
             }
         )
+
+    days_in_month = end.day
+    if suspended_days_by_month(user, year).get(month, 0) >= days_in_month:
+        if month_invoices.exists():
+            issues.append(
+                {
+                    "poziom": "wazne",
+                    "opis": f"Faktury wystawione w miesiącu zawieszenia działalności: "
+                    f"{month_invoices.count()}",
+                    "faktury": list(
+                        month_invoices.values_list("invoice_number", flat=True)[:10]
+                    ),
+                }
+            )
 
     record = MonthlySettlement.objects.filter(user=user, year=year, month=month).first()
     if record is not None and record.revenue_from_ewp:

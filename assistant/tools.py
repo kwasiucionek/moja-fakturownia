@@ -16,7 +16,13 @@ from django.db.models import Count
 from django.utils import timezone
 
 from ksiegowosc import settlements
-from ksiegowosc.models import DutyRate, DutyShift, Invoice, MonthlySettlement
+from ksiegowosc.models import (
+    BusinessSuspension,
+    DutyRate,
+    DutyShift,
+    Invoice,
+    MonthlySettlement,
+)
 from ksiegowosc.settlements import SettlementError, to_jsonable
 
 from .models import AssistantReport
@@ -85,6 +91,10 @@ def company_profile(user, scopes=()) -> dict:
         "srodowisko_ksef": c.ksef_environment,
         "token_ksef_ustawiony": bool(c.ksef_token),
         "data_rozpoczecia_dzialalnosci": c.business_start_date,
+        "zawieszenia_dzialalnosci": [
+            {"od": z.date_from, "do": z.date_to, "uwagi": z.notes}
+            for z in BusinessSuspension.objects.filter(user=user)
+        ],
         "uprawnienia_tokena": list(scopes),
     }
 
@@ -408,22 +418,38 @@ def save_annual_settlement(user, year: int, confirm: bool = False, scopes=()) ->
 
 @_wrap
 def import_from_ksef(
-    user, kind: str, days: int = 30, confirm: bool = False, scopes=()
+    user,
+    kind: str,
+    days: int = 30,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    confirm: bool = False,
+    scopes=(),
 ) -> dict:
     _require_write(scopes)
     if kind not in ("sales", "purchases"):
         raise ToolInputError(
             "kind: dozwolone wartości to 'sales' (sprzedaż) lub 'purchases' (zakupy)."
         )
-    days = max(1, min(int(days), 90))
     company = settlements.company_for(user)
     if not company.ksef_token:
         raise ToolInputError("Brak tokena KSeF w danych firmy.")
+    start = _parse_date(date_from, "date_from") if date_from else None
+    end = _parse_date(date_to, "date_to") if date_to else None
+    if end and not start:
+        raise ToolInputError("date_to wymaga date_from.")
+    days = max(1, min(int(days), 730))
+    if start:
+        period = f"{start} – {end or timezone.localdate()}"
+    else:
+        period = (
+            f"ostatnie {days} dni (od {timezone.localdate() - timedelta(days=days)})"
+        )
     plan = {
         "rodzaj": "faktury sprzedaży" if kind == "sales" else "faktury zakupu",
-        "okres": f"ostatnie {days} dni (od {timezone.localdate() - timedelta(days=days)})",
+        "okres": period,
         "srodowisko": company.ksef_environment,
-        "zachowanie": "istniejące faktury nie są duplikowane",
+        "zachowanie": "istniejące faktury nie są duplikowane; okres pobierany miesiąc po miesiącu",
     }
     if not confirm:
         return {
@@ -437,15 +463,16 @@ def import_from_ksef(
         import_sales_invoices_from_ksef,
     )
 
+    kwargs = {"days": days, "date_from": start, "date_to": end}
     if kind == "sales":
-        r = import_sales_invoices_from_ksef(company, days=days)
+        r = import_sales_invoices_from_ksef(company, **kwargs)
         return {
             "zaimportowano": True,
             "utworzono": r.created,
             "zsynchronizowano": r.synced,
             "bledy": r.errors,
         }
-    r = import_purchase_invoices_from_ksef(company, days=days)
+    r = import_purchase_invoices_from_ksef(company, **kwargs)
     return {
         "zaimportowano": True,
         "utworzono": r.created,

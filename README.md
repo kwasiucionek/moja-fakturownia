@@ -4,7 +4,7 @@ System księgowy dla jednoosobowej działalności gospodarczej, zbudowany na Dja
 
 Instancja produkcyjna: <https://moja-fakturownia.cytr.us> (rejestracja formularzem lub kontem Google).
 
-Wersja: 1.5.0 · Python 3.12 · Django 6.1
+Wersja: 1.6.0 · Python 3.12 · Django 6.1
 
 ## Funkcje
 
@@ -17,6 +17,7 @@ Wersja: 1.5.0 · Python 3.12 · Django 6.1
 ### KSeF (API 2.0, biblioteka `ksef2`)
 - Konfiguracja w „Dane firmy”: NIP, token KSeF (generowany w Aplikacji Podatnika KSeF) i środowisko — test, demo albo produkcja.
 - Wysyłka zaznaczonych faktur sprzedaży: XML w schemacie FA(3), sesja interaktywna, zapis numeru referencyjnego i statusu KSeF na fakturze; akcja „Resetuj status KSeF”.
+- Import z dowolnego okresu (pola „Od”/„Do” albo liczba dni wstecz, do 2 lat): zapytania do KSeF idą miesiąc po miesiącu, więc długi okres nie kończy się błędem 400; błąd jednego miesiąca nie przerywa pozostałych.
 - Import/synchronizacja faktur sprzedaży (rola sprzedawcy): faktury już istniejące w bazie dostają numer i status KSeF, kwoty i pozycje pozostają bez zmian; brakujące są tworzone z jedną pozycją zbiorczą.
 - Import faktur zakupu (rola nabywcy) z metadanych KSeF; oryginalny XML zapisywany jako załącznik, kategoria kosztu ustawiana domyślnie do ręcznego doprecyzowania.
 - Log komunikacji z KSeF w `logs/ksef.log`.
@@ -35,7 +36,8 @@ Obliczenia wykonuje moduł `ksiegowosc/tax_engine` — czyste funkcje z testami,
 - Składki społeczne: pełne, preferencyjne, Mały ZUS Plus (podstawa z danych firmy), ulga na start, tylko zdrowotna; dobrowolne chorobowe; Fundusz Pracy tylko przy podstawie ≥ płacy minimalnej.
 - Składka zdrowotna na ryczałcie: trzy progi przychodu (60 tys. / 300 tys. zł) liczone od przeciętnego wynagrodzenia z IV kw. poprzedniego roku; wyższy próg od miesiąca przekroczenia.
 - Ryczałt miesięczny: przychód wg stawek z pozycji faktur (data przychodu = wystawienie, nie później niż wykonanie usługi), odliczenie zapłaconych składek społecznych i 50% zdrowotnej, przenoszenie nadwyżki odliczeń na kolejne miesiące, zaokrąglenia do pełnych złotych.
-- Rozliczenie roczne: PIT-28 (podatek, zaliczki, dopłata/nadpłata) i roczne wyrównanie składki zdrowotnej, z terminami.
+- Rozliczenie roczne: PIT-28 (podatek, zaliczki, dopłata/nadpłata) i roczne wyrównanie składki zdrowotnej, z terminami. Dopłata zdrowotnej za poprzedni rok (DRA za kwiecień, płatna do 20 maja) jest doliczana do składki zapłaconej w maju i w 50% odliczana od przychodu.
+- Zawieszenie działalności (`Zawieszenia działalności` w panelu, okres od–do, koniec opcjonalny): za pełny miesiąc zawieszenia nie ma składek społecznych ani zdrowotnej, a miesiąc nie wchodzi do rocznej składki zdrowotnej; w miesiącu częściowym składki społeczne są proporcjonalne do dni prowadzenia działalności, zdrowotna w pełnej wysokości. Faktura wystawiona w zawieszonym miesiącu jest zgłaszana przy zamknięciu miesiąca.
 - Terminy płatności przesuwane na najbliższy dzień roboczy (weekendy i święta, w tym Wigilia od 2025 r.).
 - Przychód miesiąca: z ewidencji przychodów, jeśli zaimportowano JPK_EWP (podstawa ryczałtu), w przeciwnym razie z faktur; rozbieżności między ewidencją a fakturami są zgłaszane.
 - Rozliczenia miesięczne mają status: import JPK_EWP (sam przychód — wpłaty i zaliczkę wylicza asystent), szkic (od agenta) lub zatwierdzone. Import JPK_EWP nie zeruje już wpłat w istniejących rozliczeniach.
@@ -75,7 +77,7 @@ Serwer MCP (`assistant/mcp_server.py`, protokół streamable HTTP) udostępnia d
 | `month_close_checks` | kontrola kompletności miesiąca |
 | `ksef_overview`, `unbilled_duty_shifts`, `list_reports` | KSeF, nierozliczone dyżury, raporty agenta |
 | `save_monthly_settlement`, `approve_monthly_settlement`, `save_annual_settlement` | zapis rozliczeń (szkic → zatwierdzenie) |
-| `import_from_ksef` | import faktur sprzedaży lub zakupu z KSeF, bez duplikatów |
+| `import_from_ksef` | import faktur sprzedaży lub zakupu z KSeF za dowolny okres, bez duplikatów |
 
 Zasady bezpieczeństwa:
 - uwierzytelnianie tokenem Bearer (`Tokeny API (MCP)` w panelu lub `create_api_token`); w bazie tylko skrót SHA-256,
@@ -245,6 +247,11 @@ static/                 sw.js, manifest i ikony PWA
 - Parametry składek na każdy kolejny rok trzeba dopisać w `ksiegowosc/tax_engine/params.py` (agent ostrzega, gdy ich brakuje).
 
 ## Ostatnie zmiany
+
+**1.6.0 (X 2026)**
+- Zawieszenie działalności: brak składek za pełne miesiące, proporcjonalne składki społeczne za miesiąc częściowy, uwzględnienie w rozliczeniu rocznym i raporcie agenta.
+- Dopłata rocznej składki zdrowotnej za poprzedni rok w odliczeniach majowych.
+- Import z KSeF za dowolny okres (od–do, miesięcznymi oknami); także w narzędziu MCP `import_from_ksef`.
 
 **1.5.0 (X 2026)**
 - Silnik obliczeń składek i ryczałtu z testami; panel (rozliczenie miesięczne, roczne, kalkulator ZUS) liczy nim zamiast stałej stawki 14%.
