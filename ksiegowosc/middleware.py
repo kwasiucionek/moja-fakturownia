@@ -52,6 +52,9 @@ class AdminLoginRedirectMiddleware:
         has_company = CompanyInfo.objects.filter(user=request.user).exists()
 
         if not has_company:
+            if not request.user.has_perm("ksiegowosc.add_companyinfo"):
+                # Formularz i tak zwróciłby 403 — przekierowanie dałoby pętlę bez wyjścia
+                return self.get_response(request)
             logger.debug(f"User {request.user.username} has no CompanyInfo, redirecting from {path}")
             return redirect('admin:ksiegowosc_companyinfo_add')
 

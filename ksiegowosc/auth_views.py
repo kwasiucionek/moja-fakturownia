@@ -125,6 +125,13 @@ def dashboard_redirect(request):
     
     # Sprawdź czy użytkownik ma dane firmy
     if not CompanyInfo.objects.filter(user=request.user).exists():
+        if not request.user.has_perm("ksiegowosc.add_companyinfo"):
+            # Bez uprawnień formularz danych firmy zwraca 403 — zostaw w panelu z wylogowaniem
+            messages.error(
+                request,
+                'To konto nie ma uprawnień do aplikacji. Poproś administratora o dostęp.'
+            )
+            return redirect('admin:index')
         messages.warning(
             request, 
             'Uzupełnij najpierw podstawowe dane swojej firmy, aby móc korzystać z systemu.'

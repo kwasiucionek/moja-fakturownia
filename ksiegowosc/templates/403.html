@@ -12,13 +12,26 @@
         p { line-height: 1.5; }
         a { color: #004a99; text-decoration: none; font-weight: 500; }
         a:hover { text-decoration: underline; }
+        .user { color: #666; font-size: .95rem; }
+        button { background: #004a99; color: #fff; border: 0; border-radius: 4px; padding: .55rem 1.2rem;
+                 font-size: 1rem; cursor: pointer; }
+        button:hover { background: #003a7a; }
     </style>
 </head>
 <body>
     <div class="box">
         <h1>403</h1>
         <p>Brak uprawnień do wyświetlenia tej strony.</p>
+        {% if request.user.is_authenticated %}
+        <p class="user">Zalogowano jako <strong>{{ request.user.username }}</strong>.</p>
+        <form method="post" action="{% url 'auth:logout' %}">
+            {% csrf_token %}
+            <button type="submit">Wyloguj i zaloguj na inne konto</button>
+        </form>
+        <p><a href="{% url 'admin:index' %}">Panel</a></p>
+        {% else %}
         <p><a href="/">Wróć na stronę główną</a></p>
+        {% endif %}
     </div>
 </body>
 </html>
