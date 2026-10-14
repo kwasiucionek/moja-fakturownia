@@ -68,6 +68,10 @@ def _report_markdown(
         f"- składka zdrowotna zapłacona w miesiącu: {zl(lump['skladka_zdrowotna_zaplacona_w_miesiacu'])} (odliczono 50%)",
         f"- składki społeczne zapłacone w miesiącu: {zl(lump['skladki_spoleczne_zaplacone_w_miesiacu'])}",
     ]
+    if lump["odliczenia_z_poprzednich_miesiecy"]:
+        lines.append(
+            f"- przeniesione z poprzednich miesięcy: {zl(lump['odliczenia_z_poprzednich_miesiecy'])}"
+        )
     if lump["odliczenia_na_kolejne_miesiace"]:
         lines.append(
             f"- przechodzi na kolejne miesiące: {zl(lump['odliczenia_na_kolejne_miesiace'])}"

@@ -197,14 +197,48 @@ def _previous_december_dues(
         return ZERO, ZERO, notes
 
 
+# Roczne rozliczenie składki zdrowotnej za rok poprzedni jest w deklaracji za kwiecień,
+# płatnej do 20 maja — dopłata to składka zapłacona w maju (50% odliczane od przychodu).
+RECONCILIATION_MONTH = 5
+
+
+def previous_year_health_reconciliation(user, year: int) -> tuple[Decimal, list[str]]:
+    """Dopłata z rocznego rozliczenia składki zdrowotnej za rok poprzedni (zapłacona w maju)."""
+    company = company_for(user)
+    if company.business_start_date and company.business_start_date.year >= year:
+        return ZERO, []
+    try:
+        previous = annual_settlement(user, year - 1, include_prev_reconciliation=False)
+    except (MissingYearParams, SettlementError):
+        return ZERO, []
+    health = previous["zdrowotna_roczna"]
+    if health.get("doplata", ZERO) > 0:
+        return health["doplata"], [
+            f"w maju doliczono dopłatę z rocznego rozliczenia składki zdrowotnej za {year - 1}: "
+            f"{health['doplata']} zł (deklaracja za kwiecień, termin 20 maja)"
+        ]
+    if health.get("nadplata", ZERO) > 0:
+        return ZERO, [
+            f"roczne rozliczenie składki zdrowotnej za {year - 1}: nadpłata {health['nadplata']} zł "
+            "— nieuwzględniona w zaliczkach (zwrot lub zaliczenie na składki; 50% nadpłaty "
+            "wykazuje się w zeznaniu rocznym)"
+        ]
+    return ZERO, []
+
+
 def year_breakdown(
-    user, year: int, through_month: int, overrides: dict | None = None
+    user,
+    year: int,
+    through_month: int,
+    overrides: dict | None = None,
+    include_prev_reconciliation: bool = True,
 ) -> dict:
     """Wylicza miesiące od stycznia do `through_month` z przenoszeniem odliczeń.
 
     Kwoty zapłacone w danym miesiącu bierze z zapisanego rozliczenia (szkic lub
     zatwierdzone); gdy go nie ma albo pochodzi z importu JPK_EWP (sam przychód), przyjmuje,
-    że w miesiącu zapłacono składki należne za miesiąc poprzedni.
+    że w miesiącu zapłacono składki należne za miesiąc poprzedni — a w maju dodatkowo
+    dopłatę z rocznego rozliczenia składki zdrowotnej za rok poprzedni.
     `overrides` = {miesiąc: {"health_paid": D, "social_paid": D}} nadpisuje te kwoty.
     """
     company = company_for(user)
@@ -220,6 +254,12 @@ def year_breakdown(
     prev_social_due, prev_health_due, notes = _previous_december_dues(
         user, company, profile, year
     )
+    reconciliation = ZERO
+    if include_prev_reconciliation and through_month >= RECONCILIATION_MONTH:
+        reconciliation, reconciliation_notes = previous_year_health_reconciliation(
+            user, year
+        )
+        notes.extend(reconciliation_notes)
 
     for m in range(1, through_month + 1):
         record = saved.get(m)
@@ -250,6 +290,8 @@ def year_breakdown(
             source = "założenie: zapłacono składki należne za poprzedni miesiąc"
             if record is not None:
                 source += " (import JPK_EWP nie zawiera wpłat)"
+            if m == RECONCILIATION_MONTH and reconciliation:
+                health_paid += reconciliation
         month_notes.append(f"składki zapłacone w miesiącu — {source}")
 
         cumulative_revenue += revenue.total
@@ -257,11 +299,12 @@ def year_breakdown(
         health = _health_due(
             year, profile, max(ZERO, cumulative_revenue - cumulative_social_paid)
         )
+        carried_in = carry
         tax = lump_sum_tax(
             revenue.by_rate,
             social_paid=social_paid,
             health_paid=health_paid,
-            carried_deductions=carry,
+            carried_deductions=carried_in,
         )
         carry = tax.carry_forward
 
@@ -275,6 +318,7 @@ def year_breakdown(
                 "health_due": health,
                 "health_paid": health_paid,
                 "social_paid": social_paid,
+                "carried_in": carried_in,
                 "tax": tax,
                 "saved": record,
                 "notes": month_notes,
@@ -330,6 +374,7 @@ def monthly_obligations(
             **tax.as_dict(),
             "skladki_spoleczne_zaplacone_w_miesiacu": row["social_paid"],
             "skladka_zdrowotna_zaplacona_w_miesiacu": row["health_paid"],
+            "odliczenia_z_poprzednich_miesiecy": row["carried_in"],
             "termin": lump_sum_deadline(year, month),
         },
         "zapisane_rozliczenie": (
@@ -345,8 +390,12 @@ def monthly_obligations(
     }
 
 
-def annual_settlement(user, year: int) -> dict:
-    data = year_breakdown(user, year, 12)
+def annual_settlement(
+    user, year: int, include_prev_reconciliation: bool = True
+) -> dict:
+    data = year_breakdown(
+        user, year, 12, include_prev_reconciliation=include_prev_reconciliation
+    )
     company, profile, months = data["company"], data["profile"], data["months"]
 
     revenue_by_rate: dict[Decimal, Decimal] = {}

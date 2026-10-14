@@ -193,3 +193,55 @@ class EwpImportedSettlementsTests(TestCase):
         self.assertTrue(s.revenue_from_ewp)
         self.assertEqual(s.total_revenue, D("20000"))
         self.assertEqual(s.health_insurance_paid, D("498.35"))
+
+
+class PreviousYearHealthReconciliationTests(TestCase):
+    """Dopłata z rocznego rozliczenia zdrowotnej za rok poprzedni — zapłacona w maju."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ola", password="x")
+        CompanyInfo.objects.create(
+            user=self.user,
+            company_name="Firma",
+            tax_id="1234567890",
+            street="Ulica 1",
+            zip_code="00-001",
+            city="Wrocław",
+            bank_account_number="00",
+            lump_sum_rate="14",
+            zus_health_insurance_only=True,
+        )
+        c = Contractor.objects.create(user=self.user, name="Szpital", tax_id="111")
+        # 2025: próg 60 tys. przekroczony w lutym -> styczeń płacony z niższego progu
+        make_invoice(self.user, c, "1/2025", date(2025, 1, 31), "30000")
+        make_invoice(self.user, c, "2/2025", date(2025, 2, 28), "40000")
+        for month in range(1, 5):
+            make_invoice(self.user, c, f"{month}/2026", date(2026, month, 28), "10000")
+        make_invoice(self.user, c, "6/2026", date(2026, 6, 30), "37060")
+
+    def test_previous_year_top_up(self):
+        amount, notes = settlements.previous_year_health_reconciliation(self.user, 2026)
+        # 12 × 769,43 − (461,66 + 11 × 769,43) = 307,77
+        self.assertEqual(amount, D("307.77"))
+        self.assertTrue(notes)
+
+    def test_top_up_counts_as_paid_in_may_and_carries_to_june(self):
+        r = settlements.monthly_obligations(self.user, 2026, 6)
+        may = settlements.year_breakdown(self.user, 2026, 5)["months"][-1]
+        # w maju: składka za kwiecień (498,35) + dopłata za 2025 (307,77)
+        self.assertEqual(may["health_paid"], D("806.12"))
+        # maj bez przychodu -> 403,06 przechodzi na czerwiec
+        lump = r["ryczalt_za_miesiac"]
+        self.assertEqual(lump["odliczenia_z_poprzednich_miesiecy"], D("403.06"))
+        self.assertTrue(any("dopłatę z rocznego rozliczenia" in n for n in r["uwagi"]))
+
+    def test_annual_includes_top_up_in_paid_health(self):
+        with_top_up = settlements.annual_settlement(self.user, 2026)
+        without = settlements.annual_settlement(
+            self.user, 2026, include_prev_reconciliation=False
+        )
+        self.assertEqual(
+            with_top_up["pit28"]["skladka_zdrowotna_zaplacona"]
+            - without["pit28"]["skladka_zdrowotna_zaplacona"],
+            D("307.77"),
+        )
