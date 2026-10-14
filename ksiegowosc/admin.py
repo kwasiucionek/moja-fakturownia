@@ -23,6 +23,7 @@ from django.utils.safestring import mark_safe
 from ksef.services import send_invoice_to_ksef
 from weasyprint import HTML
 
+from .permissions import OwnDataAdminMixin
 from .contractors import (
     ContractorMergeError,
     find_or_create_contractor,
@@ -124,7 +125,7 @@ class PaymentStatusFilter(admin.SimpleListFilter):
 
 
 @admin.register(CompanyInfo)
-class CompanyInfoAdmin(admin.ModelAdmin):
+class CompanyInfoAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     list_display = ("company_name", "tax_id", "business_type", "user")
     list_filter = (
         "business_type",
@@ -220,6 +221,13 @@ class CompanyInfoAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Panel",
+            {
+                "fields": ("duty_module_name",),
+                "description": "Nazwy sekcji w menu panelu",
+            },
+        ),
+        (
             "Przedstawiciel ustawowy",
             {
                 "fields": (
@@ -238,6 +246,14 @@ class CompanyInfoAdmin(admin.ModelAdmin):
             return qs
         return qs.filter(user=request.user)
 
+    def has_add_permission(self, request):
+        # Jedno konto = jedne dane firmy (OneToOne)
+        if not super().has_add_permission(request):
+            return False
+        return request.user.is_superuser or not CompanyInfo.objects.filter(
+            user=request.user
+        ).exists()
+
     def save_model(self, request, obj, form, change):
         if not hasattr(obj, "user") or not obj.user:
             obj.user = request.user
@@ -248,7 +264,7 @@ class CompanyInfoAdmin(admin.ModelAdmin):
 
 
 @admin.register(Contractor)
-class ContractorAdmin(admin.ModelAdmin):
+class ContractorAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     list_display = ("name", "tax_id", "city", "invoice_count", "user")
     search_fields = ("name", "tax_id")
     exclude = ("user",)
@@ -314,7 +330,7 @@ class ContractorAdmin(admin.ModelAdmin):
 
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     list_display = (
         "invoice_number",
         "contractor_name",
@@ -365,7 +381,7 @@ class PaymentAdmin(admin.ModelAdmin):
 # ==== INLINES ====
 
 
-class InvoiceItemInline(admin.TabularInline):
+class InvoiceItemInline(OwnDataAdminMixin, admin.TabularInline):
     model = InvoiceItem
     extra = 0
     fieldsets = (
@@ -399,7 +415,7 @@ class InvoiceItemInline(admin.TabularInline):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
-class PaymentInline(admin.TabularInline):
+class PaymentInline(OwnDataAdminMixin, admin.TabularInline):
     model = Payment
     extra = 1
     exclude = ("user",)
@@ -423,7 +439,7 @@ class PaymentInline(admin.TabularInline):
 
 
 @admin.register(Invoice)
-class InvoiceAdmin(admin.ModelAdmin):
+class InvoiceAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/invoice/change_list.html"
     inlines = [InvoiceItemInline, PaymentInline]
     list_display = (
@@ -1218,7 +1234,7 @@ class InvoiceAdmin(admin.ModelAdmin):
 
 
 @admin.register(MonthlySettlement)
-class MonthlySettlementAdmin(admin.ModelAdmin):
+class MonthlySettlementAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/monthlysettlement/change_list.html"
     list_display = (
         "year",
@@ -1847,7 +1863,7 @@ class MonthlySettlementAdmin(admin.ModelAdmin):
 
 
 @admin.register(YearlySettlement)
-class YearlySettlementAdmin(admin.ModelAdmin):
+class YearlySettlementAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/yearlysettlement/change_list.html"
     list_display = (
         "year",
@@ -2094,7 +2110,7 @@ class ZUSRatesAdmin(admin.ModelAdmin):
 
 
 @admin.register(PurchaseInvoice)
-class PurchaseInvoiceAdmin(admin.ModelAdmin):
+class PurchaseInvoiceAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/purchaseinvoice/change_list.html"
     list_display = (
         "invoice_number",
@@ -2188,7 +2204,7 @@ class PurchaseInvoiceAdmin(admin.ModelAdmin):
 
 
 @admin.register(ExpenseCategory)
-class ExpenseCategoryAdmin(admin.ModelAdmin):
+class ExpenseCategoryAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     list_display = ("name", "code", "is_active", "user")
     list_filter = ("is_active", "user")
     search_fields = ("name", "code")
@@ -2209,7 +2225,7 @@ class ExpenseCategoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(DutyRate)
-class DutyRateAdmin(admin.ModelAdmin):
+class DutyRateAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     list_display = (
         "contractor",
         "valid_from",
@@ -2222,6 +2238,10 @@ class DutyRateAdmin(admin.ModelAdmin):
     list_filter = ("contractor", "user")
     exclude = ("user",)
     ordering = ("-valid_from",)
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = {"title": f"{duty_label(request.user)} — stawki", **(extra_context or {})}
+        return super().changelist_view(request, extra_context)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "contractor" and not request.user.is_superuser:
@@ -2256,7 +2276,7 @@ class BilledFilter(admin.SimpleListFilter):
 
 
 @admin.register(DutyShift)
-class DutyShiftAdmin(admin.ModelAdmin):
+class DutyShiftAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/ksiegowosc/dutyshift/change_list.html"
     list_display = (
         "date",
@@ -2277,6 +2297,10 @@ class DutyShiftAdmin(admin.ModelAdmin):
 
     class Media:
         css = {"all": ("admin/css/custom_admin.css",)}
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = {"title": duty_label(request.user), **(extra_context or {})}
+        return super().changelist_view(request, extra_context)
 
     def day_name(self, obj):
         return DNI_TYGODNIA_PL[obj.date.weekday()]
@@ -2571,7 +2595,7 @@ class DutyShiftAdmin(admin.ModelAdmin):
 
 
 @admin.register(BusinessSuspension)
-class BusinessSuspensionAdmin(admin.ModelAdmin):
+class BusinessSuspensionAdmin(OwnDataAdminMixin, admin.ModelAdmin):
     list_display = ("date_from", "date_to", "notes", "user")
     list_filter = ("user",)
     exclude = ("user",)
@@ -2584,3 +2608,34 @@ class BusinessSuspensionAdmin(admin.ModelAdmin):
         if not obj.user_id:
             obj.user = request.user
         super().save_model(request, obj, form, change)
+
+
+# ==== WŁASNA NAZWA SEKCJI DYŻURÓW W MENU ====
+
+
+def duty_label(user) -> str:
+    """Nazwa sekcji dyżurów z „Dane firmy → Panel” (domyślnie „Dyżury”)."""
+    if not getattr(user, "is_authenticated", False):
+        return "Dyżury"
+    company = CompanyInfo.objects.filter(user_id=user.pk).only("duty_module_name").first()
+    return company.duty_label if company else "Dyżury"
+
+
+_site_get_app_list = admin.site.get_app_list
+
+
+def _app_list_with_user_labels(request, app_label=None):
+    app_list = _site_get_app_list(request, app_label)
+    label = duty_label(request.user)
+    if label == "Dyżury":
+        return app_list
+    names = {"DutyShift": label, "DutyRate": f"{label} — stawki"}
+    for app in app_list:
+        for model in app["models"]:
+            if model["object_name"] in names:
+                model["name"] = names[model["object_name"]]
+    return app_list
+
+
+# Menu (Jazzmin: available_apps) i strona główna panelu biorą listę z get_app_list
+admin.site.get_app_list = _app_list_with_user_labels

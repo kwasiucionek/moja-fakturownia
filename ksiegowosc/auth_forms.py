@@ -2,7 +2,9 @@
 
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User
+
+from .permissions import grant_default_access
 from django.core.exceptions import ValidationError
 import re
 
@@ -127,31 +129,9 @@ class CustomUserCreationForm(UserCreationForm):
         
         if commit:
             user.save()
-            
-            # Przypisz do grupy 'ksiegowosc'
-            try:
-                ksiegowosc_group, created = Group.objects.get_or_create(name='ksiegowosc')
-                user.groups.add(ksiegowosc_group)
-                
-                # Dodaj podstawowe uprawnienia
-                from django.contrib.auth.models import Permission
-                from django.contrib.contenttypes.models import ContentType
-                from ksiegowosc.models import CompanyInfo, Contractor, Invoice, MonthlySettlement
-                
-                # Uprawnienia do modeli księgowości
-                models_to_grant = [CompanyInfo, Contractor, Invoice, MonthlySettlement]
-                permissions_to_grant = []
-                
-                for model in models_to_grant:
-                    content_type = ContentType.objects.get_for_model(model)
-                    permissions = Permission.objects.filter(content_type=content_type)
-                    permissions_to_grant.extend(permissions)
-                
-                user.user_permissions.set(permissions_to_grant)
-                
-            except Exception as e:
-                print(f"Błąd podczas przypisywania uprawnień: {e}")
-        
+            # Grupa „ksiegowosc” z uprawnieniami (ksiegowosc/permissions.py)
+            grant_default_access(user)
+
         return user
 
 

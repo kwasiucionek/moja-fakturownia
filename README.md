@@ -56,10 +56,13 @@ Obliczenia wykonuje moduł `ksiegowosc/tax_engine` — czyste funkcje z testami,
   ```
 - Akcja „Wystaw fakturę z zaznaczonych dyżurów” — grupuje dyżury według rodzaju i typu dnia, zamraża zastosowaną stawkę na dyżurze.
 - Załącznik PDF z wykazem dyżurów do faktury.
+- Własna nazwa sekcji w menu (np. „Zlecenia”, „Godziny pracy”): „Dane firmy” → „Panel”, pole „Nazwa sekcji dyżurów”; ustawienie każdego konta osobno.
 
 ### Konta i dostęp
-- Rejestracja i logowanie formularzem lub przez Google (OAuth2); nowy użytkownik trafia do grupy `ksiegowosc` z uprawnieniami do modułu, po pierwszym logowaniu przez Google — do formularza danych firmy.
-- Izolacja danych: listy w panelu filtrowane po użytkowniku (superużytkownik widzi wszystko).
+- Rejestracja i logowanie formularzem lub przez Google (OAuth2); każde nowe zwykłe konto (także założone w panelu) trafia do grupy `ksiegowosc`, a po pierwszym logowaniu — do formularza danych firmy.
+- Uprawnienia ma grupa `ksiegowosc`, nie poszczególne konta (lista w `ksiegowosc/permissions.py`, synchronizowana po każdej migracji): dane firmy, kontrahenci, faktury i płatności, zakupy, rozliczenia, zawieszenia, dyżury i stawki, tokeny i raporty asystenta.
+- Izolacja danych: listy, filtry boczne i pola wyboru pokazują tylko rekordy zalogowanego użytkownika; kolumna i filtr „Użytkownik” są tylko dla superużytkownika, który widzi wszystko.
+- Konto bez uprawnień nie wpada w pętlę przekierowań; strona 403 ma przycisk wylogowania.
 - Endpointy kontrolne: `/health/` (JSON: baza, cache), `/ready/`, `/live/`.
 
 ### PWA
@@ -254,6 +257,7 @@ static/                 sw.js, manifest i ikony PWA
 - Dopłata rocznej składki zdrowotnej za poprzedni rok w odliczeniach majowych.
 - Import z KSeF za dowolny okres (od–do, miesięcznymi oknami); także w narzędziu MCP `import_from_ksef`.
 - Normalizacja NIP-u kontrahentów, dopasowanie w importach, scalanie duplikatów (akcja w panelu; migracja 0022 scala istniejące).
+- Zwykłe konta: pełny dostęp do modułów (w tym dyżury, stawki i asystent) przez grupę `ksiegowosc`, izolacja danych w filtrach i polach wyboru, własna nazwa sekcji dyżurów.
 
 **1.5.0 (X 2026)**
 - Silnik obliczeń składek i ryczałtu z testami; panel (rozliczenie miesięczne, roczne, kalkulator ZUS) liczy nim zamiast stałej stawki 14%.

@@ -559,6 +559,13 @@ class CompanyInfo(models.Model):
         verbose_name="Podstawa Małego ZUS Plus",
         help_text="Miesięczna podstawa wyliczona z dochodu za poprzedni rok (wymagana przy Małym ZUS Plus).",
     )
+    duty_module_name = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        verbose_name="Nazwa sekcji dyżurów",
+        help_text="Jak ma się nazywać sekcja dyżurów w menu, np. „Zlecenia” albo „Godziny pracy”. Puste = „Dyżury”.",
+    )
 
     pkd_code = models.CharField(max_length=10, blank=True, verbose_name="Kod PKD")
     pkd_description = models.CharField(
@@ -635,6 +642,10 @@ class CompanyInfo(models.Model):
 
     def is_vat_exempt(self):
         return self.vat_settlement == "zwolniony" or not self.vat_payer
+
+    @property
+    def duty_label(self) -> str:
+        return (self.duty_module_name or "").strip() or "Dyżury"
 
     def contribution_profile(self):
         """Profil dla silnika obliczeń (ksiegowosc.tax_engine)."""
